@@ -1,5 +1,5 @@
-rtagent
-rtagent-console
+/rtagent
+/rtagent-console
 rtagent.db
 test_write.txt
 *.log

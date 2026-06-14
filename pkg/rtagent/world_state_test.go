@@ -462,7 +462,7 @@ func TestRuntimeWorldStateProjectsHostProviders(t *testing.T) {
 func TestRuntimeWorldStateProjectionIsDeterministicExcludingTimestamps(t *testing.T) {
 	// v1 contract: WorldState projection is deterministic for identical input
 	// facts, except for wall-clock-derived timestamp fields. See
-	// docs/api/world-state.md Projection Determinism.
+	// docs/sdk-handbook.md WorldState projection determinism.
 	ctx := context.Background()
 	rt := openTestRuntime(t, func(cfg *Config) {
 		cfg.Host.Tools = []ToolProvider{&recordingToolProvider{
@@ -519,7 +519,7 @@ func TestRuntimeWorldStateProjectionIsDeterministicExcludingTimestamps(t *testin
 }
 
 // clearTimestampFields zeroes the wall-clock-derived fields documented as
-// non-deterministic in docs/api/world-state.md Projection Determinism, so two
+// non-deterministic in docs/sdk-handbook.md WorldState projection determinism, so two
 // projections of identical facts can be compared structurally.
 func clearTimestampFields(s *WorldStateSnapshot) {
 	s.BuildID = ""

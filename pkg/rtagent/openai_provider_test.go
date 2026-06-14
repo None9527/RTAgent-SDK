@@ -332,7 +332,7 @@ func TestOpenAIProviderSurfacesRetryableFlagsWithoutRetrying(t *testing.T) {
 	// v1 contract: the SDK does not retry provider failures. A 429 must be
 	// returned as-is with Retryable/RateLimited classification hints, and the
 	// provider must issue exactly one HTTP request (no retry loop). See
-	// docs/api/model-providers.md Retry and Failure Semantics.
+	// docs/sdk-handbook.md Retry and failure semantics.
 	var requests int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requests, 1)

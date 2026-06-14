@@ -64,7 +64,7 @@ type wsCacheEntry struct {
 //     effective during an active loop (host Inspect calls no longer recompute
 //     on every model turn).
 //
-// Other design notes (see docs/api/world-state.md Projection Determinism):
+// Other design notes (see docs/sdk-handbook.md WorldState Projection):
 //   - Only full (unfiltered) snapshots are cached. Partition-filtered queries
 //     bypass the cache because external WorldState providers may narrow their
 //     output by partition.

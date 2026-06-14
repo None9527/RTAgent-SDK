@@ -65,7 +65,7 @@ Each layer is replaceable:
 Tools, memory, MCP servers, skills, file intelligence — these are **external data sources and capability providers** that the kernel observes through well-defined ports. They are not compiled into the kernel. This means:
 - You choose your memory backend (vector DB, SQLite, flat files — your call).
 - You choose your tool implementations (shell, file I/O, custom services).
-- You choose your model provider (DashScope, OpenAI, Anthropic, local — your call).
+- You choose your model provider (OpenAI-compatible HTTP APIs, Anthropic, local — your call).
 - The kernel never holds business truth. It projects, it does not own.
 
 ## What the Kernel Owns
@@ -92,10 +92,10 @@ The kernel is useful on its own, but an agent needs capabilities. Tentacles are 
 
 ```go
 provider, _ := rtagent.NewOpenAICompatibleProvider(rtagent.OpenAICompatibleProviderConfig{
-    BaseURL:             "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    APIKey:              os.Getenv("DASHSCOPE_API_KEY"),
-    Model:               "qwen3.6-plus",
-    ContextWindowTokens: 131072,
+    BaseURL:             "https://api.openai.com/v1", // any OpenAI-compatible endpoint
+    APIKey:              os.Getenv("OPENAI_API_KEY"),
+    Model:               "gpt-4o",
+    ContextWindowTokens: 128000,
 })
 
 rt, _ := rtagent.Open(ctx, rtagent.Config{
@@ -216,7 +216,7 @@ Expected output:
 completed: hello runtime sdk
 ```
 
-## DashScope / OpenAI-Compatible Provider
+## OpenAI-Compatible Provider
 
 The provider contract is a single `ModelProvider` interface:
 
@@ -224,17 +224,17 @@ The provider contract is a single `ModelProvider` interface:
 CompleteTurn(ctx context.Context, req rtagent.ModelRequest, stream rtagent.ModelStreamHandler) (rtagent.ModelResponse, error)
 ```
 
-Use DashScope OpenAI-compatible mode:
+Use any Chat Completions-compatible endpoint:
 
 ```bash
-export DASHSCOPE_API_KEY=...
-go run ./examples/dashscope_qwen
+export OPENAI_API_KEY=...
+go run ./examples/openai_compatible
 ```
 
 Optional environment variables:
 
-- `DASHSCOPE_MODEL`: defaults to `qwen3.7-plus`.
-- `DASHSCOPE_BASE_URL`: defaults to DashScope compatible-mode endpoint.
+- `OPENAI_MODEL`: defaults to `gpt-4o`.
+- `OPENAI_BASE_URL`: defaults to `https://api.openai.com/v1`.
 
 ## Validation
 
@@ -262,13 +262,5 @@ bash scripts/validate_sdk.sh
 
 ## Docs
 
-- v1 readiness: `docs/release/v1-readiness.md`
-- Release process: `docs/release/release-process.md`
-- SDK architecture: `docs/architecture/sdk-core.md`
-- Public compatibility: `docs/api/public-compatibility.md`
-- Public API snapshot: `docs/api/public-api.snapshot.txt`
-- Model providers (capabilities, budget, convergence, retry): `docs/api/model-providers.md`
-- Tool providers: `docs/api/tool-providers.md`
-- Permission center: `docs/api/permission-center.md`
-- Session lifecycle: `docs/api/session-lifecycle.md`
-- WorldState (determinism, read cache): `docs/api/world-state.md`
+- Start with the consolidated SDK handbook: `docs/sdk-handbook.md`.
+- The handbook covers architecture, API contracts, provider wiring, validation, compatibility policy, and release guidance.

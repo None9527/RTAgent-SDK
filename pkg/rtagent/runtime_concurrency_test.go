@@ -9,7 +9,7 @@ import (
 
 func TestRuntimeConcurrentEmitAndSubmitRunAreRaceFree(t *testing.T) {
 	// Regression coverage for the v1 concurrency contract documented in
-	// docs/api/public-compatibility.md: Emit sequence allocation is serialized
+	// docs/sdk-handbook.md: Emit sequence allocation is serialized
 	// within a single Runtime, and concurrent facade use must not race. Run
 	// under `go test -race` (via scripts/validate_sdk.sh) to catch data races.
 	ctx := context.Background()

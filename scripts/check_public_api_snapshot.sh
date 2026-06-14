@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-SNAPSHOT="docs/api/public-api.snapshot.txt"
+SNAPSHOT="scripts/public-api.snapshot.txt"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 

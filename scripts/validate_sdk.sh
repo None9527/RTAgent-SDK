@@ -117,11 +117,4 @@ go run ./examples/host_resume_cli \
   --input "next turn" \
   --graph >/dev/null
 
-if [[ "${RTAGENT_RUN_DASHSCOPE_INTEGRATION:-}" == "1" ]]; then
-  echo "==> DashScope live integration"
-  go test ./pkg/rtagent -run TestDashScopeQwen37PlusIntegration -count=1 -v
-else
-  echo "==> DashScope live integration skipped (set RTAGENT_RUN_DASHSCOPE_INTEGRATION=1)"
-fi
-
 echo "SDK validation passed"

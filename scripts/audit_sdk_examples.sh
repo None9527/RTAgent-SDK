@@ -6,7 +6,7 @@ cd "$ROOT"
 
 failures=0
 external_examples=(
-  "dashscope_qwen"
+  "openai_compatible"
 )
 
 fail() {
@@ -69,7 +69,7 @@ while IFS= read -r main_file; do
   audit_host_entrypoint "$example_dir"
 
   if is_external_example "$example_name"; then
-    if ! rg -q 'DASHSCOPE_API_KEY|RTAGENT_RUN_.*INTEGRATION' "$main_file" README.md docs/release/v1-readiness.md; then
+    if ! rg -q 'OPENAI_API_KEY|OPENAI_BASE_URL|OPENAI_MODEL' "$main_file" README.md docs/sdk-handbook.md; then
       fail "$example_dir is marked external but lacks documented opt-in credentials/integration gate"
     fi
     continue

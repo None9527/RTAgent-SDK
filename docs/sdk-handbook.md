@@ -539,10 +539,10 @@ Tentacles are host-owned capability providers. The kernel observes their data th
 
 ```go
 provider, _ := rtagent.NewOpenAICompatibleProvider(rtagent.OpenAICompatibleProviderConfig{
-    BaseURL:             "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    APIKey:              os.Getenv("DASHSCOPE_API_KEY"),
-    Model:               "qwen3.6-plus",
-    ContextWindowTokens: 131072,
+    BaseURL:             "https://api.openai.com/v1", // any Chat Completions-compatible endpoint
+    APIKey:              os.Getenv("OPENAI_API_KEY"),
+    Model:               "gpt-4o",
+    ContextWindowTokens: 128000,
 })
 ```
 
@@ -722,7 +722,7 @@ The SDK **does not retry** provider failures. `CompleteTurn` issues a single cal
 
 ### OpenAI-compatible provider
 
-`NewOpenAICompatibleProvider` implements the contract over Chat Completions-compatible HTTP APIs. DashScope helpers: `NewDashScopeQwen37PlusProviderFromEnv` (reads `DASHSCOPE_API_KEY`, `DASHSCOPE_BASE_URL`, `DASHSCOPE_MODEL`).
+`NewOpenAICompatibleProvider` implements the contract over Chat Completions-compatible HTTP APIs. Configure `BaseURL`, `APIKey`, `Model`, and optional capability fields for the endpoint you use.
 
 ---
 
@@ -803,13 +803,13 @@ bash scripts/release_preflight.sh # release gate checks
 |---|---|
 | `audit_sdk_boundary.sh` | Single ModelProvider contract, no legacy Execute, no public startup/persistence leakage |
 | `audit_sdk_shape.sh` | File-size budgets, package split policy |
-| `audit_sdk_docs.sh` | Docs index integrity, required metadata |
+| `audit_sdk_docs.sh` | Verifies `docs/` contains only the consolidated handbook and that required metadata is present |
 | `audit_sdk_examples.sh` | Example entrypoint style, validation coverage |
-| `check_public_api_snapshot.sh` | Public API surface matches snapshot |
+| `check_public_api_snapshot.sh` | Public API surface matches `scripts/public-api.snapshot.txt` |
 
 ### Release gates
 
-See `docs/release/v1-readiness.md` for the complete gate table. v0.0.1 has closed: module path, naming, README, validation, packaging. Remaining for v1.0: real-model multi-turn tool convergence, tentacle coverage.
+This handbook is the release guidance source. v0.0.1 has closed: module path, naming, README, validation, and packaging. Remaining for v1.0: real-model multi-turn tool convergence and tentacle coverage.
 
 ---
 
@@ -833,7 +833,7 @@ See `docs/release/v1-readiness.md` for the complete gate table. v0.0.1 has close
 
 ---
 
-*This handbook is the consolidated reference. For deeper detail on individual contracts, see the focused docs under `docs/api/` and `docs/architecture/`.*
+*This handbook is the consolidated reference for architecture, public compatibility, validation, and release guidance.*
 
 ## Read When
 

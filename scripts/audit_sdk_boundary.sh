@@ -27,7 +27,7 @@ else
   fail "ModelProvider contract drifted from CompleteTurn(ctx, req, stream)"
 fi
 
-if rg -q '\bStreamingModelProvider\b' pkg/rtagent docs/api/public-api.snapshot.txt; then
+if rg -q '\bStreamingModelProvider\b' pkg/rtagent scripts/public-api.snapshot.txt; then
   fail "legacy StreamingModelProvider surface is present"
 else
   pass "no legacy StreamingModelProvider surface"
@@ -151,10 +151,10 @@ if [[ "$legacy_failures" -eq 0 ]]; then
   pass "legacy product-shell files are absent"
 fi
 
-if go doc ./pkg/rtagent | rg -q 'docs/api/public-compatibility.md'; then
-  pass "package docs reference public compatibility policy"
+if go doc ./pkg/rtagent | rg -q 'docs/sdk-handbook.md'; then
+  pass "package docs reference the SDK handbook"
 else
-  fail "package docs do not reference docs/api/public-compatibility.md"
+  fail "package docs do not reference docs/sdk-handbook.md"
 fi
 
 if [[ "$failures" -gt 0 ]]; then

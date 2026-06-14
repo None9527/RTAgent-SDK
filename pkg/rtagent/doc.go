@@ -6,8 +6,7 @@
 // storage, governance, context materialization, model turns, tool execution,
 // and read-side projections replaceable by host applications.
 //
-// Public compatibility for v1 is documented in
-// docs/api/public-compatibility.md. Hosts should integrate through this package
-// and Config.Host ports instead of depending on internal startup, persistence,
-// or product shell packages.
+// Public compatibility for v1 is documented in docs/sdk-handbook.md. Hosts
+// should integrate through this package and Config.Host ports instead of
+// depending on internal startup, persistence, or product shell packages.
 package rtagent

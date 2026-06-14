@@ -15,8 +15,8 @@ pass() {
   echo "PASS: $*"
 }
 
-if [[ ! -f docs/INDEX.md ]]; then
-  fail "docs/INDEX.md is missing"
+if [[ ! -f docs/sdk-handbook.md ]]; then
+  fail "docs/sdk-handbook.md is missing"
 fi
 
 required_headings=(
@@ -26,31 +26,18 @@ required_headings=(
   "## Validation"
 )
 
-while IFS= read -r file; do
+extra_docs="$(find docs -type f ! -path 'docs/sdk-handbook.md' | sort)"
+if [[ -n "$extra_docs" ]]; then
+  echo "$extra_docs" >&2
+  fail "docs/ must only contain docs/sdk-handbook.md"
+fi
+
+if [[ -f docs/sdk-handbook.md ]]; then
   for heading in "${required_headings[@]}"; do
-    if ! rg -q "^${heading}$" "$file"; then
-      fail "$file is missing required heading: $heading"
+    if ! rg -q "^${heading}$" docs/sdk-handbook.md; then
+      fail "docs/sdk-handbook.md is missing required heading: $heading"
     fi
   done
-
-  if ! rg -q "\`${file}\`" docs/INDEX.md; then
-    fail "$file is not listed in docs/INDEX.md"
-  fi
-done < <(find docs -type f -name '*.md' ! -path 'docs/INDEX.md' | sort)
-
-if [[ -f docs/INDEX.md ]]; then
-  while IFS='|' read -r _ raw_path _; do
-    path="$(printf '%s' "$raw_path" | sed -E 's/^[[:space:]]*`?//; s/`?[[:space:]]*$//')"
-    if [[ -z "$path" ]]; then
-      continue
-    fi
-    if [[ "$path" =~ ^-+$ ]]; then
-      continue
-    fi
-    if [[ ! -e "$path" ]]; then
-      fail "docs/INDEX.md references missing path: $path"
-    fi
-  done < <(tail -n +4 docs/INDEX.md)
 fi
 
 if [[ "$failures" -gt 0 ]]; then
@@ -58,5 +45,5 @@ if [[ "$failures" -gt 0 ]]; then
   exit 1
 fi
 
-pass "docs index paths exist and markdown docs carry required metadata"
+pass "docs contains only the SDK handbook and required metadata is present"
 echo "SDK docs audit passed"

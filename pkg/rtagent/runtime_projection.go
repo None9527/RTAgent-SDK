@@ -154,7 +154,7 @@ func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldS
 	// projection-relevant sequence (not MAX(sequence)), so high-frequency
 	// loop-internal events (heartbeats, model deltas, checkpoints) do NOT
 	// invalidate the cache — only state-changing events do. See
-	// world_state_cache.go and docs/api/world-state.md Read Cache.
+	// world_state_cache.go and docs/sdk-handbook.md WorldState Projection.
 	if selectedPartition == "" {
 		if cached, ok := r.wsCache.get(runID); ok {
 			return cached, nil

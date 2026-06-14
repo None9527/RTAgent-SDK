@@ -56,10 +56,10 @@ else
   pass "no root generated binary/database artifacts detected"
 fi
 
-if go doc ./pkg/rtagent | rg -q 'docs/api/public-compatibility.md'; then
-  pass "package docs reference public compatibility policy"
+if go doc ./pkg/rtagent | rg -q 'docs/sdk-handbook.md'; then
+  pass "package docs reference the SDK handbook"
 else
-  fail "package docs do not reference docs/api/public-compatibility.md"
+  fail "package docs do not reference docs/sdk-handbook.md"
 fi
 
 if api_snapshot_output="$(bash scripts/check_public_api_snapshot.sh 2>&1)"; then
@@ -101,16 +101,16 @@ if [[ "$module_path" == "rtagent" ]]; then
   if rg -q 'Current status: v1\.0' README.md; then
     fail "README claims v1.0 while module path remains local-only"
   fi
-  if rg -q 'Current implementation is \*\*v1\.0' docs/release/v1-readiness.md; then
-    fail "v1 readiness doc claims v1.0 while module path remains local-only"
+  if rg -q 'Current status: v1\.0|\*\*Version:\*\* v1\.0' README.md docs/sdk-handbook.md; then
+    fail "README or handbook claims v1.0 while module path remains local-only"
   fi
   pass "release identity docs do not contradict local module path"
 else
   if rg -q 'Current status: v0\.2' README.md; then
     fail "README still claims v0.2 after module path was changed; update release status before tagging v1"
   fi
-  if rg -q 'Current implementation is \*\*v0\.2 / v1-candidate internal SDK\*\*|not a final `v1\.0` release' docs/release/v1-readiness.md; then
-    fail "v1 readiness doc still claims v0.2/v1-candidate after module path was changed; update release identity before tagging v1"
+  if rg -q '\*\*Version:\*\* v0\.2|v1-candidate internal SDK|not a final `v1\.0` release' docs/sdk-handbook.md; then
+    fail "handbook still claims v0.2/v1-candidate after module path was changed; update release identity before tagging v1"
   fi
   pass "release identity docs are compatible with finalized module path"
 fi

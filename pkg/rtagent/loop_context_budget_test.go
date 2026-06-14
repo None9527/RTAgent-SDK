@@ -188,3 +188,170 @@ func itoa(i int) string {
 	}
 	return string(buf[pos:])
 }
+
+// stubCapabilityProvider is a ModelProvider that declares capabilities for
+// testing the capability-driven budget derivation.
+type stubCapabilityProvider struct {
+	caps ModelCapabilities
+}
+
+func (s stubCapabilityProvider) CompleteTurn(_ context.Context, _ ModelRequest, _ ModelStreamHandler) (ModelResponse, error) {
+	return ModelResponse{Output: "stub", StopReason: RuntimeStatusCompleted}, nil
+}
+
+func (s stubCapabilityProvider) Capabilities() ModelCapabilities {
+	return s.caps
+}
+
+func TestDeriveContextMessageBudgetFromProviderCapabilities(t *testing.T) {
+	cases := []struct {
+		name           string
+		windowTokens   int
+		wantMinBudget  int
+		wantMaxBudget  int
+	}{
+		{"8k window", 8192, 4, 16},
+		{"32k window", 32768, 4, 64},
+		{"128k window", 131072, 100, 256},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := stubCapabilityProvider{caps: ModelCapabilities{ContextWindowTokens: tc.windowTokens}}
+			budget := deriveContextMessageBudget(provider)
+			if budget < tc.wantMinBudget || budget > tc.wantMaxBudget {
+				t.Fatalf("budget for %s = %d, want in [%d, %d]", tc.name, budget, tc.wantMinBudget, tc.wantMaxBudget)
+			}
+		})
+	}
+}
+
+func TestDeriveContextMessageBudgetZeroWhenNoCapabilities(t *testing.T) {
+	// A plain ModelProviderFunc does not implement ModelCapabilityProvider.
+	provider := ModelProviderFunc(func(_ context.Context, _ ModelRequest, _ ModelStreamHandler) (ModelResponse, error) {
+		return ModelResponse{}, nil
+	})
+	if budget := deriveContextMessageBudget(provider); budget != 0 {
+		t.Fatalf("budget for plain func provider = %d, want 0 (no capabilities)", budget)
+	}
+}
+
+func TestDeriveContextMessageBudgetZeroWhenWindowUnknown(t *testing.T) {
+	provider := stubCapabilityProvider{caps: ModelCapabilities{ContextWindowTokens: 0}}
+	if budget := deriveContextMessageBudget(provider); budget != 0 {
+		t.Fatalf("budget for unknown window = %d, want 0", budget)
+	}
+}
+
+func TestOpenDerivesBudgetFromProviderWhenNotExplicitlySet(t *testing.T) {
+	// When MaxContextMessages is not set but the provider declares a window,
+	// the kernel must derive a budget. We verify by running enough iterations
+	// to exceed the derived budget and asserting trimming kicks in.
+	ctx := context.Background()
+	var observedCounts []int
+	rt := openTestRuntime(t, func(cfg *Config) {
+		cfg.Runtime.MaxToolIterations = 10
+		// Do NOT set MaxContextMessages — let it derive from provider.
+		cfg.Host.Tools = []ToolProvider{&recordingToolProvider{
+			specs: []ToolSpec{{Name: "echo", Description: "echo", ReadOnly: true}},
+		}}
+		cfg.Host.Model = ModelProviderWithCapabilities{
+			Inner: ModelProviderFunc(func(_ context.Context, req ModelRequest, _ ModelStreamHandler) (ModelResponse, error) {
+				observedCounts = append(observedCounts, len(req.Messages))
+				if len(req.ToolSpecs) == 0 {
+					return ModelResponse{Output: "done", StopReason: RuntimeStatusCompleted}, nil
+				}
+				return ModelResponse{
+					ToolCalls:  []ToolCall{{Name: "echo", Arguments: map[string]any{"value": "x"}, ReadOnly: true}},
+					StopReason: "tool_calls",
+				}, nil
+			}),
+			Caps: ModelCapabilities{ContextWindowTokens: 8192}, // small → small derived budget
+		}
+	})
+
+	_, err := rt.SubmitRun(ctx, SubmitRunRequest{
+		RunID:     "run-cap-derived",
+		SessionID: "session-cap-derived",
+		Input:     "derive budget from provider",
+	}, Identity{ActorID: "tester"})
+	if err != nil {
+		t.Fatalf("SubmitRun() error = %v", err)
+	}
+
+	if len(observedCounts) == 0 {
+		t.Fatalf("model was never called")
+	}
+	// The derived budget for 8192 tokens (75% usable / 500 avg) ≈ 12.
+	// After several iterations the message count must be bounded.
+	maxObserved := 0
+	for _, c := range observedCounts {
+		if c > maxObserved {
+			maxObserved = c
+		}
+	}
+	if maxObserved > 20 {
+		t.Fatalf("max message count = %d, derived budget should have bounded it under ~20", maxObserved)
+	}
+}
+
+func TestOpenExplicitMaxContextMessagesOverridesProviderCapabilities(t *testing.T) {
+	// Explicit MaxContextMessages must win over provider-declared window.
+	ctx := context.Background()
+	const explicitBudget = 3
+	var observedCounts []int
+	rt := openTestRuntime(t, func(cfg *Config) {
+		cfg.Runtime.MaxToolIterations = 10
+		cfg.Runtime.MaxContextMessages = explicitBudget
+		cfg.Host.Tools = []ToolProvider{&recordingToolProvider{
+			specs: []ToolSpec{{Name: "echo", Description: "echo", ReadOnly: true}},
+		}}
+		cfg.Host.Model = ModelProviderWithCapabilities{
+			Inner: ModelProviderFunc(func(_ context.Context, req ModelRequest, _ ModelStreamHandler) (ModelResponse, error) {
+				observedCounts = append(observedCounts, len(req.Messages))
+				if len(req.ToolSpecs) == 0 {
+					return ModelResponse{Output: "done", StopReason: RuntimeStatusCompleted}, nil
+				}
+				return ModelResponse{
+					ToolCalls:  []ToolCall{{Name: "echo", Arguments: map[string]any{"value": "x"}, ReadOnly: true}},
+					StopReason: "tool_calls",
+				}, nil
+			}),
+			// Large window would derive a big budget, but explicit config wins.
+			Caps: ModelCapabilities{ContextWindowTokens: 200000},
+		}
+	})
+
+	_, err := rt.SubmitRun(ctx, SubmitRunRequest{
+		RunID:     "run-explicit-override",
+		SessionID: "session-explicit-override",
+		Input:     "explicit budget wins",
+	}, Identity{ActorID: "tester"})
+	if err != nil {
+		t.Fatalf("SubmitRun() error = %v", err)
+	}
+	for i, c := range observedCounts {
+		if c > explicitBudget {
+			t.Fatalf("iteration %d saw %d messages, want <= %d (explicit config must override provider-derived budget)", i, c, explicitBudget)
+		}
+	}
+}
+
+func TestModelProviderWithCapabilitiesWrapsAndDeclares(t *testing.T) {
+	inner := ModelProviderFunc(func(_ context.Context, _ ModelRequest, _ ModelStreamHandler) (ModelResponse, error) {
+		return ModelResponse{Output: "inner"}, nil
+	})
+	wrapped := ModelProviderWithCapabilities{
+		Inner: inner,
+		Caps:  ModelCapabilities{ContextWindowTokens: 32768, SupportsStreaming: true},
+	}
+	// Must satisfy ModelProvider.
+	resp, err := wrapped.CompleteTurn(context.Background(), ModelRequest{}, nil)
+	if err != nil || resp.Output != "inner" {
+		t.Fatalf("CompleteTurn delegation failed: %+v %v", resp, err)
+	}
+	// Must satisfy ModelCapabilityProvider.
+	caps := wrapped.Capabilities()
+	if caps.ContextWindowTokens != 32768 || !caps.SupportsStreaming {
+		t.Fatalf("Capabilities = %+v, want ContextWindowTokens=32768 SupportsStreaming=true", caps)
+	}
+}

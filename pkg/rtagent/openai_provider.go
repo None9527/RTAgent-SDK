@@ -29,16 +29,26 @@ type OpenAICompatibleProviderConfig struct {
 	Timeout      time.Duration
 	Headers      map[string]string
 	ExtraBody    map[string]any
+	// ContextWindowTokens is the model's total context window (input + output)
+	// in tokens. When set, the provider declares it via Capabilities() so the
+	// kernel can derive a context-message budget automatically. 0 = unknown
+	// (the kernel falls back to explicit config or no trimming).
+	ContextWindowTokens int
+	// MaxOutputTokens is the model's per-turn output token limit, if known.
+	// Declared via Capabilities(); reserved for future output budgeting.
+	MaxOutputTokens int
 }
 
 type OpenAICompatibleProvider struct {
-	baseURL      string
-	apiKey       string
-	model        string
-	systemPrompt string
-	httpClient   *http.Client
-	headers      map[string]string
-	extraBody    map[string]any
+	baseURL             string
+	apiKey              string
+	model               string
+	systemPrompt        string
+	httpClient          *http.Client
+	headers             map[string]string
+	extraBody           map[string]any
+	contextWindowTokens int
+	maxOutputTokens     int
 }
 
 type openAICompatibleProviderError struct {
@@ -108,14 +118,28 @@ func NewOpenAICompatibleProvider(cfg OpenAICompatibleProviderConfig) (*OpenAICom
 		systemPrompt = "You are the model provider for RTAgent. Complete the user's runtime turn. If tools are available and needed, request tool calls using the provided tool schemas."
 	}
 	return &OpenAICompatibleProvider{
-		baseURL:      baseURL,
-		apiKey:       apiKey,
-		model:        model,
-		systemPrompt: systemPrompt,
-		httpClient:   httpClient,
-		headers:      cloneStringMap(cfg.Headers),
-		extraBody:    clonePayload(cfg.ExtraBody),
+		baseURL:             baseURL,
+		apiKey:              apiKey,
+		model:               model,
+		systemPrompt:        systemPrompt,
+		httpClient:          httpClient,
+		headers:             cloneStringMap(cfg.Headers),
+		extraBody:           clonePayload(cfg.ExtraBody),
+		contextWindowTokens: cfg.ContextWindowTokens,
+		maxOutputTokens:     cfg.MaxOutputTokens,
 	}, nil
+}
+
+// Capabilities declares the provider's model capabilities. It implements
+// ModelCapabilityProvider so the kernel can derive a context-message budget
+// from ContextWindowTokens when the host does not set an explicit
+// RuntimeConfig.MaxContextMessages.
+func (p *OpenAICompatibleProvider) Capabilities() ModelCapabilities {
+	return ModelCapabilities{
+		ContextWindowTokens: p.contextWindowTokens,
+		MaxOutputTokens:     p.maxOutputTokens,
+		SupportsStreaming:   true,
+	}
 }
 
 func NewDashScopeOpenAICompatibleProviderFromEnv(model string) (*OpenAICompatibleProvider, error) {

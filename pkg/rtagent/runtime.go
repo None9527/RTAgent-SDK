@@ -128,6 +128,13 @@ func newRuntimeFromKernel(runtimeCfg RuntimeConfig, workDir string, host HostPor
 	if maxContextMessages < 0 {
 		maxContextMessages = 0
 	}
+	// When the host did not set an explicit MaxContextMessages, derive one from
+	// the model provider's declared context window (if any). This keeps the
+	// context budget tied to the actual model capability rather than a generic
+	// runtime config knob. Explicit MaxContextMessages always wins.
+	if maxContextMessages == 0 {
+		maxContextMessages = deriveContextMessageBudget(modelProvider)
+	}
 	runLeaseTTL := runtimeCfg.RunLeaseTTL
 	if runLeaseTTL <= 0 {
 		runLeaseTTL = 5 * time.Minute

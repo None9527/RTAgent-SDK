@@ -2,6 +2,40 @@ package rtagent
 
 import "strings"
 
+// deriveContextMessageBudget computes a message-count window from the model
+// provider's declared context window. It returns 0 (no trimming) when the
+// provider does not declare capabilities or declares an unknown window.
+//
+// Heuristic: reserve ~25% of the window for system prompt, tool schemas, and
+// output, and assume an average of ~500 tokens per conversation message
+// (covering assistant text, tool calls, and tool observations). This is a
+// conservative default; hosts wanting precise control should set
+// RuntimeConfig.MaxContextMessages explicitly, which overrides this derivation.
+func deriveContextMessageBudget(provider ModelProvider) int {
+	if provider == nil {
+		return 0
+	}
+	capsProvider, ok := provider.(ModelCapabilityProvider)
+	if !ok {
+		return 0
+	}
+	caps := capsProvider.Capabilities()
+	if caps.ContextWindowTokens <= 0 {
+		return 0
+	}
+	const (
+		reservedFraction    = 0.25 // 25% for system/tools/output
+		avgTokensPerMessage = 500
+		minDerivedBudget    = 4
+	)
+	usable := float64(caps.ContextWindowTokens) * (1.0 - reservedFraction)
+	budget := int(usable / float64(avgTokensPerMessage))
+	if budget < minDerivedBudget {
+		return minDerivedBudget
+	}
+	return budget
+}
+
 // trimMessagesToWindow bounds a conversation message slice to at most max
 // entries while preserving task context. It is a pure function with no
 // dependencies on Runtime state, making it cheap to test exhaustively.

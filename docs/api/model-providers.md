@@ -60,16 +60,23 @@ This is regression-covered by `TestOpenAIProviderSurfacesRetryableFlagsWithoutRe
 
 ## Context Budget
 
-The SDK loop accumulates conversation messages across iterations (user input, assistant turns, tool observations). Without a bound, a long multi-tool run grows the message history until it overflows the model's context window. `RuntimeConfig.MaxContextMessages` prevents this.
+The SDK loop accumulates conversation messages across iterations (user input, assistant turns, tool observations). Without a bound, a long multi-tool run grows the message history until it overflows the model's context window. The context budget prevents this.
 
-- **Message-count window, not token budget.** The kernel intentionally avoids tokenizer coupling. The window counts messages, so it is imprecise but predictable and zero-dependency. Hosts should set it based on their model's context window and typical message size (e.g. 50 for a model with a generous window and compact tool outputs).
-- **Opt-in.** The default is `0` = no trimming; existing behavior is unchanged. Hosts running real models set `MaxContextMessages` explicitly.
-- **Trimming policy.** When the conversation exceeds the window, the loop keeps the first `role:"user"` message (the task context — losing it would make the model forget the objective) plus the most recent `MaxContextMessages-1` messages. Older middle messages are dropped.
+**Budget sources (priority order):**
+
+1. **Explicit `RuntimeConfig.MaxContextMessages`** — when set (>0), the kernel uses this exact message-count window. Hosts wanting precise control set it directly.
+2. **Provider-declared context window** — when `MaxContextMessages` is not set and the model provider implements `ModelCapabilityProvider` with `ContextWindowTokens > 0`, the kernel derives a message-count budget automatically. This keeps the budget tied to the actual model capability. The `OpenAICompatibleProvider` declares capabilities when `ContextWindowTokens` is set in its config; function-based providers use `ModelProviderWithCapabilities`.
+3. **No trimming** — when neither is available, the loop does not trim (current behavior for providers that don't declare capabilities).
+
+**Derivation heuristic (source 2):** the kernel reserves ~25% of the window for system prompt, tool schemas, and output, assumes ~500 tokens per conversation message, and computes `budget = (window × 0.75) / 500`. This is conservative; explicit `MaxContextMessages` always overrides it.
+
+- **Message-count window, not token budget.** The kernel intentionally avoids tokenizer coupling. The window counts messages, so it is imprecise but predictable and zero-dependency.
+- **Trimming policy.** When the conversation exceeds the window, the loop keeps the first `role:"user"` message (the task context — losing it would make the model forget the objective) plus the most recent `budget-1` messages. Older middle messages are dropped.
 - **Irreversible and resume-visible.** Trimmed messages are gone from the loop state, so a checkpoint taken after trimming restores the trimmed window, not the full history. This is the correct trade-off for long conversations: the model sees the current window, consistent with what it saw before the run suspended.
 - **Observability.** Each trim emits a `context.compacted` event with `before_count`, `after_count`, `dropped_count`, and `window_limit`, so hosts can monitor context pressure.
 - **Iteration budget.** Separately, `RuntimeConfig.MaxToolIterations` (default 32) caps the number of tool-call rounds. Together these two bounds prevent both unbounded looping and unbounded context growth.
 
-This is regression-covered by `TestTrimMessagesToWindow*` (pure function) and `TestRuntimeLoopTrimsMessagesToConfiguredWindow` (end-to-end).
+This is regression-covered by `TestTrimMessagesToWindow*` (pure function), `TestRuntimeLoopTrimsMessagesToConfiguredWindow` (end-to-end explicit), `TestDeriveContextMessageBudget*` (capability derivation), `TestOpenDerivesBudgetFromProviderWhenNotExplicitlySet` (auto-derive), and `TestOpenExplicitMaxContextMessagesOverridesProviderCapabilities` (priority).
 
 ## Convergence Control
 

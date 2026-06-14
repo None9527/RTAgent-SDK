@@ -15,6 +15,35 @@ func (fn ModelProviderFunc) CompleteTurn(ctx context.Context, req ModelRequest, 
 	return fn(ctx, req, stream)
 }
 
+// ModelProviderWithCapabilities wraps a ModelProvider (or ModelProviderFunc) and
+// declares capabilities for it. Use this when you have a function-based provider
+// but want the kernel to know the model's context window so it can derive a
+// context-message budget automatically:
+//
+//	rt, _ := rtagent.Open(ctx, rtagent.Config{
+//	    Host: rtagent.HostPorts{
+//	        Model: rtagent.ModelProviderWithCapabilities{
+//	            Inner: rtagent.ModelProviderFunc(myTurnFunc),
+//	            Caps:  rtagent.ModelCapabilities{ContextWindowTokens: 32768},
+//	        },
+//	    },
+//	})
+type ModelProviderWithCapabilities struct {
+	Inner ModelProvider
+	Caps  ModelCapabilities
+}
+
+func (w ModelProviderWithCapabilities) CompleteTurn(ctx context.Context, req ModelRequest, stream ModelStreamHandler) (ModelResponse, error) {
+	if w.Inner == nil {
+		return ModelResponse{}, errors.New("rtagent: ModelProviderWithCapabilities.Inner is nil")
+	}
+	return w.Inner.CompleteTurn(ctx, req, stream)
+}
+
+func (w ModelProviderWithCapabilities) Capabilities() ModelCapabilities {
+	return w.Caps
+}
+
 // ToolProviderAdapter adapts host functions to ToolProvider.
 type ToolProviderAdapter struct {
 	Specs   func(context.Context, ExecutionScope) ([]ToolSpec, error)

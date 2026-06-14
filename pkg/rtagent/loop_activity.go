@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 func (r *Runtime) emitActivityStarted(ctx context.Context, scope ExecutionScope, activityID string) error {

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	rtagent "rtagent/pkg/rtagent"
+	rtagent "github.com/None9527/RTAgent/pkg/rtagent"
 )
 
 func main() {

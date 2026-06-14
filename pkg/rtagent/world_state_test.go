@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 func TestRuntimeWorldStateProjectsTypedPartitions(t *testing.T) {

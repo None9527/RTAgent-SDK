@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 type LocalLeaseManager struct {

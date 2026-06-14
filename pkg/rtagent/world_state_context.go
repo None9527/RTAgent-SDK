@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"rtagent/internal/domain/contextual"
+	"github.com/None9527/RTAgent/internal/domain/contextual"
 )
 
 func (r *Runtime) addContextWorldState(ctx context.Context, runID string, events []RuntimeEventEnvelope, draftFor func(string, string, string, int64) *worldStatePartitionDraft, maxSeq int64) {

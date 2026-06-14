@@ -34,7 +34,7 @@ type Runtime struct {
 	skillProvider       SkillProvider
 	worldStateProviders []WorldStateProvider
 	maxToolIterations   int
-	maxContextMessages int
+	maxContextMessages  int
 	runLeaseTTL         time.Duration
 
 	eventMu   sync.Mutex

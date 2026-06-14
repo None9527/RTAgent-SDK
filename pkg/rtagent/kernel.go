@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"rtagent/internal/domain/contextual"
-	"rtagent/internal/domain/persistence"
-	domainworld "rtagent/internal/domain/worldstate"
-	"rtagent/internal/runtime/events"
-	"rtagent/internal/startup"
+	"github.com/None9527/RTAgent/internal/domain/contextual"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
+	domainworld "github.com/None9527/RTAgent/internal/domain/worldstate"
+	"github.com/None9527/RTAgent/internal/runtime/events"
+	"github.com/None9527/RTAgent/internal/startup"
 )
 
 type runtimeEventPublisher interface {

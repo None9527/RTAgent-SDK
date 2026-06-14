@@ -106,7 +106,7 @@ const (
 	EventKindRunHeartbeat   EventKind = "run.heartbeat"
 
 	EventKindContextPacketCreated EventKind = "context.packet.created"
-	EventKindContextCompacted    EventKind = "context.compacted"
+	EventKindContextCompacted     EventKind = "context.compacted"
 	EventKindModelRequested       EventKind = "model.requested"
 	EventKindModelResponded       EventKind = "model.responded"
 	EventKindModelDelta           EventKind = "model.delta"

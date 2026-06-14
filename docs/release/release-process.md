@@ -68,9 +68,8 @@ Runtime/SDK owner.
 
 ## Current Blockers
 
-- Final Go module path has not been selected; until it is chosen, `scripts/release_preflight.sh` intentionally fails on the local `rtagent` path. The mechanical migration is verified and read-only testable via `scripts/set_module_path.sh --check <path>` and `--dry-run <path>`.
-- README and `docs/release/v1-readiness.md` must remain v0.2 / v1-candidate until the final module path is applied; `scripts/release_preflight.sh` rejects both premature v1.0-on-local-path and stale v0.2-after-migration.
-- Final release-candidate validation must be rerun after module path and README status change.
+- Module path is finalized (`github.com/None9527/RTAgent`) and published at v0.0.1. No blockers for v0.0.1.
+- Remaining v1.0 gates: real-model multi-turn tool-call convergence and tentacle coverage (see `docs/release/v1-readiness.md`).
 
 ## Evidence
 

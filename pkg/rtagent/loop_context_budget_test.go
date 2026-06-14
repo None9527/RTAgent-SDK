@@ -205,10 +205,10 @@ func (s stubCapabilityProvider) Capabilities() ModelCapabilities {
 
 func TestDeriveContextMessageBudgetFromProviderCapabilities(t *testing.T) {
 	cases := []struct {
-		name           string
-		windowTokens   int
-		wantMinBudget  int
-		wantMaxBudget  int
+		name          string
+		windowTokens  int
+		wantMinBudget int
+		wantMaxBudget int
 	}{
 		{"8k window", 8192, 4, 16},
 		{"32k window", 32768, 4, 64},

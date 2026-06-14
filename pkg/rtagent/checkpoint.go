@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 const (

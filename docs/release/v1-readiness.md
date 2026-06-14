@@ -43,11 +43,9 @@ Runtime/SDK owner.
 
 ## Current Decision
 
-Current implementation is **v0.2 / v1-candidate internal SDK**, not a final `v1.0` release.
+Current implementation is **v0.0.1**, published at `github.com/None9527/RTAgent`. The module import path is finalized. This is the first public release — the kernel core loop, convergence control, context budget, WorldState adaptive cache, permission/approval, session lifecycle, checkpoint resume, and model capability-driven budget are all complete and regression-covered.
 
-The runtime SDK is already usable for internal host integration and dogfooding because it has a runnable core loop, host provider ports, OpenAI-compatible provider, PermissionCenter, session/checkpoint resume, WorldState projections, examples, and passing full Go validation.
-
-It should not be tagged `v1.0` until the remaining release gates below are explicitly closed.
+The runtime SDK is usable for internal host integration and dogfooding. It has not yet been tagged `v1.0`; the remaining release gates below track the gap between v0.0.1 and v1.0 (primarily real-model multi-turn convergence validation and broader tentacle coverage).
 
 ## Done For v1 Core
 
@@ -107,12 +105,14 @@ It should not be tagged `v1.0` until the remaining release gates below are expli
 
 | Gate | Status | Required Closure |
 |---|---|---|
-| Module import path | Blocking | Replace local module path `rtagent` with the final repository import path before tagging v1; `scripts/set_module_path.sh` prepares the mechanical migration once the path is chosen. |
-| Release naming | Blocking | Decide final external naming, Go module path, package docs, and version label; see `docs/release/release-process.md`. |
-| README status | Blocking | Change README from `v0.2` to `v1.0` only after all gates pass. |
-| Final release validation pass | Blocking | Re-run `bash scripts/validate_sdk.sh` and any release-candidate-specific commands after module path, naming, README status, and packaging are finalized. |
-| DashScope live provider | Conditional | Run optional integration when credentials/network are available, or explicitly mark it as a non-blocking external integration gate. |
-| Dirty worktree packaging | Blocking | Prepare a clean release branch/tag or equivalent package artifact after review; do not publish from an unreviewed dirty worktree. |
+| Module import path | Done | Finalized to `github.com/None9527/RTAgent`; published at v0.0.1. |
+| Release naming | Done | Repository `RTAgent` at `github.com/None9527`; version v0.0.1. |
+| README status | Done | README updated to v0.0.1. |
+| Final release validation pass | Done | `bash scripts/validate_sdk.sh` passes on the published module path. DashScope live integration verified with qwen3.6-plus (single-turn completed). |
+| DashScope live provider | Conditional | Single-turn verified with qwen3.6-plus; multi-turn tool-call convergence under a real model is a v1.0 gate, not v0.0.1. |
+| Dirty worktree packaging | Done | v0.0.1 tagged from a clean worktree on `main`. |
+| Real-model multi-turn tool convergence | Blocking (v1.0) | v0.0.1 ships single-turn verified; multi-turn tool-call convergence under a real model (not mock) must pass before v1.0. |
+| Tentacle coverage | Blocking (v1.0) | v0.0.1 ships the kernel only; tool/memory/MCP/skill tentacles must be integrated and tested before v1.0. |
 
 ## Explicit v1 Non-Goals
 

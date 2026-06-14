@@ -173,11 +173,11 @@ func (r *Runtime) runModelToolLoop(ctx context.Context, state loopContinuation, 
 				Kind:    EventKindTurnCompleted,
 				Message: "Convergence finalization completed",
 				Payload: map[string]any{
-					"session_id":          scope.SessionID,
-					"finalization":        true,
-					"convergence_reason":  finalizationReason,
-					"ignored_tool_calls":  len(response.ToolCalls),
-					"output_preview":      previewString(response.Output, 500),
+					"session_id":         scope.SessionID,
+					"finalization":       true,
+					"convergence_reason": finalizationReason,
+					"ignored_tool_calls": len(response.ToolCalls),
+					"output_preview":     previewString(response.Output, 500),
 				},
 			}); err != nil {
 				return r.failRun(ctx, scope, activityID, "finalization_event_failed", err)

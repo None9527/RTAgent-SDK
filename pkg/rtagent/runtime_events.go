@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"rtagent/internal/domain/persistence"
-	"rtagent/internal/runtime/events"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/runtime/events"
 )
 
 func (r *Runtime) Emit(ctx context.Context, draft RuntimeEventDraft) (RuntimeEventEnvelope, error) {

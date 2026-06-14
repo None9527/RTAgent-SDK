@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 func (r *Runtime) addCapabilityWorldState(ctx context.Context, runID string, events []RuntimeEventEnvelope, draftFor func(string, string, string, int64) *worldStatePartitionDraft, maxSeq int64, permissionSnapshot *PermissionSnapshot) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"rtagent/internal/domain/contextual"
+	"github.com/None9527/RTAgent/internal/domain/contextual"
 )
 
 func (r *Runtime) RegisterContextHandle(ctx context.Context, handle ContextHandle) error {

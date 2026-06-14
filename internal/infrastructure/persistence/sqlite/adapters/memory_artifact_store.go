@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 func (b *SQLiteBundle) PutMemory(ctx context.Context, rec persistence.MemoryRecord) error {

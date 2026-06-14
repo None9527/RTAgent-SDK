@@ -6,8 +6,8 @@ import (
 	"sort"
 	"sync"
 
-	"rtagent/internal/domain/contextual"
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/contextual"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 type LocalMaterializer struct {

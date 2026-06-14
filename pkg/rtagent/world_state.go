@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	domainworld "rtagent/internal/domain/worldstate"
+	domainworld "github.com/None9527/RTAgent/internal/domain/worldstate"
 )
 
 type worldStatePartitionDraft struct {

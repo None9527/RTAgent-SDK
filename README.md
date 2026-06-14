@@ -2,7 +2,7 @@
 
 RTAgent is a Go runtime SDK extracted from ngoagent project experience. It provides an embeddable agent runtime loop, not a full product shell.
 
-Current status: v0.2, usable for internal host integration and dogfooding. The v1 public boundary is still being stabilized.
+Current status: v0.0.1. The kernel core loop, convergence control, context budget, WorldState adaptive cache, permission/approval, session lifecycle, and checkpoint resume are complete. Ready for tentacle integration (tools, memory, MCP, skills).
 
 ## What It Owns
 

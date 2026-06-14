@@ -45,7 +45,7 @@ func eventIsProjectionRelevant(kind EventKind) bool {
 // snapshot — NOT the absolute max sequence, so high-frequency non-relevant
 // events (heartbeats, model deltas, checkpoints) do not make it stale.
 type wsCacheEntry struct {
-	snapshot   WorldStateSnapshot
+	snapshot    WorldStateSnapshot
 	upToProjSeq int64
 }
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"rtagent/internal/domain/persistence"
+	"github.com/None9527/RTAgent/internal/domain/persistence"
 )
 
 func TestPermissionCenterSuspendsSideEffectToolInDefaultMode(t *testing.T) {

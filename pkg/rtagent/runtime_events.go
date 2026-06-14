@@ -74,6 +74,15 @@ func (r *Runtime) Emit(ctx context.Context, draft RuntimeEventDraft) (RuntimeEve
 		})
 	}
 
+	// Advance the WorldState cache's projection-relevant sequence watermark.
+	// Only events that can change a WorldState partition advance it; high-
+	// frequency non-relevant events (heartbeats, model deltas, checkpoints)
+	// are a cheap no-op, so a host inspecting mid-loop does not trigger a full
+	// recompute on every model turn. See world_state_cache.go.
+	if r.wsCache != nil {
+		r.wsCache.observeEvent(draft.RunID, draft.Kind, seq)
+	}
+
 	return RuntimeEventEnvelope{
 		SchemaVersion: SchemaRuntimeEventEnvelopeV1,
 		EventID:       eventID,

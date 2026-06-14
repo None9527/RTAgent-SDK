@@ -6,55 +6,131 @@ import (
 	"sync"
 )
 
-// wsCacheEntry holds a full (unfiltered) WorldStateSnapshot and the event
-// sequence up to which it was computed. It is the materialized read model for
-// one run.
+// projectionRelevantEvents lists the event kinds that actually change the
+// WorldState projection. These are the kinds consumed by the partition
+// functions in world_state_*.go (context, capability, activity, task,
+// governance). Events NOT in this set (run.heartbeat, model.requested,
+// model.responded, model.delta, checkpoint.created, agent.started, run.created,
+// session.started/ended, turn.started, agent.plan.proposed) do not alter any
+// partition and therefore must not invalidate the cache.
+//
+// This is the foundation of the adaptive cache: high-frequency loop-internal
+// events are filtered out so that a host inspecting a run mid-loop does not
+// trigger a full WorldState recompute on every model turn or heartbeat.
+var projectionRelevantEvents = map[EventKind]bool{
+	EventKindContextPacketCreated: true,
+	EventKindToolInvoked:          true,
+	EventKindToolSucceeded:        true,
+	EventKindToolFailed:           true,
+	EventKindActivityStarted:      true,
+	EventKindActivityCompleted:    true,
+	EventKindPermissionRequested:  true,
+	EventKindPermissionGranted:    true,
+	EventKindPermissionDenied:     true,
+	EventKindTurnCompleted:        true,
+	EventKindTurnFailed:           true,
+	EventKindTurnCancelled:        true,
+	EventKindRunInterrupted:       true,
+}
+
+// eventIsProjectionRelevant reports whether a given event kind can change any
+// WorldState partition. Non-relevant events do not invalidate the cache.
+func eventIsProjectionRelevant(kind EventKind) bool {
+	return projectionRelevantEvents[kind]
+}
+
+// wsCacheEntry holds a full (unfiltered) WorldStateSnapshot and the
+// projection-relevant event sequence up to which it was computed. upToProjSeq
+// is the highest sequence among projection-relevant events covered by the
+// snapshot — NOT the absolute max sequence, so high-frequency non-relevant
+// events (heartbeats, model deltas, checkpoints) do not make it stale.
 type wsCacheEntry struct {
-	snapshot WorldStateSnapshot
-	upToSeq  int64
+	snapshot   WorldStateSnapshot
+	upToProjSeq int64
 }
 
 // worldStateCache is a per-Runtime, in-memory cache of the latest full
-// WorldStateSnapshot per run. It makes repeated WorldState queries O(1) when no
-// new events have been appended since the last computation.
+// WorldStateSnapshot per run, with projection-aware freshness.
 //
-// Design notes (see docs/api/world-state.md Projection Determinism):
+// Adaptive freshness model:
+//   - projSeq tracks the highest projection-relevant event sequence per run,
+//     updated in-memory by the Emit path. Only events in
+//     projectionRelevantEvents advance it.
+//   - A cache hit requires upToProjSeq >= the run's current projSeq. This means
+//     a heartbeat or model delta emitted after the snapshot does NOT invalidate
+//     it, while a tool/permission/activity event does.
+//   - This bounds the number of recomputes to the number of state-changing
+//     events, not the total event volume — which is what makes the cache
+//     effective during an active loop (host Inspect calls no longer recompute
+//     on every model turn).
+//
+// Other design notes (see docs/api/world-state.md Projection Determinism):
 //   - Only full (unfiltered) snapshots are cached. Partition-filtered queries
 //     bypass the cache because external WorldState providers may narrow their
-//     output by partition, so a filtered result is not derivable from a cached
-//     full snapshot without recomputation.
-//   - Reads return a deep copy so callers cannot observe later incremental
-//     mutations of the cached snapshot.
-//   - Freshness is checked against the authoritative event sequence (DB
-//     MAX(sequence)), not a local counter, so writes from any path invalidate
-//     the cache correctly.
+//     output by partition.
+//   - Reads return a deep copy so callers cannot observe later mutations.
 type worldStateCache struct {
 	mu      sync.RWMutex
 	entries map[string]*wsCacheEntry
+	// projSeq tracks the highest projection-relevant event sequence per run.
+	// Updated by observeEvent (called from the Emit path). Used as the
+	// freshness watermark instead of MAX(sequence) so non-relevant events do
+	// not invalidate the cache.
+	projSeq map[string]int64
 }
 
 func newWorldStateCache() *worldStateCache {
-	return &worldStateCache{entries: make(map[string]*wsCacheEntry)}
+	return &worldStateCache{
+		entries: make(map[string]*wsCacheEntry),
+		projSeq: make(map[string]int64),
+	}
+}
+
+// observeEvent advances the projection-relevant sequence for a run when the
+// event kind can change the WorldState projection. Called from the Emit path
+// for every appended event; non-relevant kinds are a cheap no-op.
+func (c *worldStateCache) observeEvent(runID string, kind EventKind, seq int64) {
+	if !eventIsProjectionRelevant(kind) {
+		return
+	}
+	c.mu.Lock()
+	if seq > c.projSeq[runID] {
+		c.projSeq[runID] = seq
+	}
+	c.mu.Unlock()
+}
+
+// currentProjSeq returns the highest projection-relevant event sequence for a
+// run, or 0 if no projection-relevant event has been observed yet.
+func (c *worldStateCache) currentProjSeq(runID string) int64 {
+	c.mu.RLock()
+	seq := c.projSeq[runID]
+	c.mu.RUnlock()
+	return seq
 }
 
 // get returns a deep copy of the cached full snapshot for runID if it is fresh
-// up to maxSeq, plus true. It returns false if there is no cache or the cache
-// is stale (upToSeq < maxSeq).
-func (c *worldStateCache) get(runID string, maxSeq int64) (WorldStateSnapshot, bool) {
+// up to the run's current projection-relevant sequence, plus true. Returns
+// false if there is no cache or a projection-relevant event has arrived since
+// the snapshot was built (upToProjSeq < current projSeq).
+func (c *worldStateCache) get(runID string) (WorldStateSnapshot, bool) {
+	projSeq := c.currentProjSeq(runID)
 	c.mu.RLock()
 	entry, ok := c.entries[runID]
 	c.mu.RUnlock()
-	if !ok || entry == nil || entry.upToSeq < maxSeq {
+	if !ok || entry == nil || entry.upToProjSeq < projSeq {
 		return WorldStateSnapshot{}, false
 	}
 	return deepCopyWorldStateSnapshot(entry.snapshot), true
 }
 
 // put stores a freshly computed full snapshot for runID, marking it fresh up to
-// seq. It keeps a deep copy so the caller retains ownership of its value.
-func (c *worldStateCache) put(runID string, snapshot WorldStateSnapshot, seq int64) {
+// the run's current projection-relevant sequence. It keeps a deep copy so the
+// caller retains ownership of its value.
+func (c *worldStateCache) put(runID string, snapshot WorldStateSnapshot) {
+	projSeq := c.currentProjSeq(runID)
 	c.mu.Lock()
-	c.entries[runID] = &wsCacheEntry{snapshot: deepCopyWorldStateSnapshot(snapshot), upToSeq: seq}
+	c.entries[runID] = &wsCacheEntry{snapshot: deepCopyWorldStateSnapshot(snapshot), upToProjSeq: projSeq}
 	c.mu.Unlock()
 }
 

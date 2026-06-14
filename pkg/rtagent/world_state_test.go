@@ -588,12 +588,14 @@ func TestRuntimeWorldStateSnapshotCacheServesStableAndInvalidatesOnGrowth(t *tes
 		}
 	}
 
-	// Invariant 2: appending a new event invalidates the cache; the next query
-	// must reflect the new event, not a stale cached snapshot.
+	// Invariant 2: appending a new projection-relevant event invalidates the
+	// cache; the next query must reflect the new event, not a stale cached
+	// snapshot. Use a projection-relevant kind (tool.succeeded drives the
+	// activity/task partitions) so the adaptive cache actually invalidates.
 	if _, err := rt.Emit(ctx, RuntimeEventDraft{
 		RunID:   "run-worldstate-cache",
-		Kind:    EventKindRunHeartbeat,
-		Message: "cache invalidation heartbeat",
+		Kind:    EventKindToolSucceeded,
+		Message: "cache invalidation tool success",
 	}); err != nil {
 		t.Fatalf("Emit() error = %v", err)
 	}
@@ -601,26 +603,111 @@ func TestRuntimeWorldStateSnapshotCacheServesStableAndInvalidatesOnGrowth(t *tes
 	if err != nil {
 		t.Fatalf("WorldState() after growth error = %v", err)
 	}
-	// The heartbeat does not directly produce a partition entry, but it raises
-	// the source watermark, which must advance past the pre-emit value.
-	if afterGrowth.SourceWatermark == "" {
-		t.Fatalf("SourceWatermark empty after growth")
-	}
-	// Confirm the run's events now include the heartbeat (proves the projection
-	// was rebuilt against current facts, not a stale cache).
+	// A projection-relevant event must advance the source watermark and trigger
+	// a recompute; confirm the run's events now include the tool success.
 	events, err := rt.ListEvents(ctx, EventQuery{RunID: "run-worldstate-cache"})
 	if err != nil {
 		t.Fatalf("ListEvents() error = %v", err)
 	}
-	foundHeartbeat := false
+	foundToolSuccess := false
 	for _, ev := range events {
-		if ev.Kind == EventKindRunHeartbeat && strings.Contains(ev.Message, "cache invalidation") {
-			foundHeartbeat = true
+		if ev.Kind == EventKindToolSucceeded && strings.Contains(ev.Message, "cache invalidation") {
+			foundToolSuccess = true
 			break
 		}
 	}
-	if !foundHeartbeat {
-		t.Fatalf("heartbeat event missing from run events after growth; cache may have served stale state")
+	if !foundToolSuccess {
+		t.Fatalf("tool.succeeded event missing from run events after growth; cache may have served stale state")
+	}
+	if afterGrowth.SourceWatermark == "" {
+		t.Fatalf("SourceWatermark empty after growth")
+	}
+}
+
+func TestRuntimeWorldStateCacheAdaptiveInvalidationRespectsEventRelevance(t *testing.T) {
+	// The adaptive cache (world_state_cache.go) invalidates only on
+	// projection-relevant events. This test pins the two sides of that
+	// contract, which is what makes host Inspect cheap during an active loop:
+	//   - Non-relevant events (run.heartbeat, model.delta, checkpoint.created)
+	//     do NOT invalidate: a query after such events serves the cached
+	//     snapshot (proven by the cached snapshot's BuildID matching).
+	//   - A relevant event (tool.succeeded) DOES invalidate: the next query
+	//     recomputes (proven by a changed BuildID and an advanced watermark).
+	ctx := context.Background()
+	rt := openTestRuntime(t)
+
+	if _, err := rt.SubmitRun(ctx, SubmitRunRequest{
+		RunID:     "run-adaptive-cache",
+		SessionID: "session-adaptive-cache",
+		Input:     "warm the world state cache",
+	}, Identity{ActorID: "tester"}); err != nil {
+		t.Fatalf("SubmitRun() error = %v", err)
+	}
+
+	// Warm the cache.
+	warm, err := rt.WorldState(ctx, WorldStateQuery{RunID: "run-adaptive-cache"})
+	if err != nil {
+		t.Fatalf("WorldState() warm error = %v", err)
+	}
+	warmBuildID := warm.BuildID
+	warmWatermark := warm.SourceWatermark
+	if warmBuildID == "" {
+		t.Fatalf("warm snapshot has empty BuildID; cannot use it as a cache-hit marker")
+	}
+
+	// Emit a batch of non-relevant events. Under the adaptive model these must
+	// NOT invalidate the cache.
+	nonRelevant := []EventKind{
+		EventKindRunHeartbeat,
+		EventKindModelRequested,
+		EventKindModelResponded,
+		EventKindModelDelta,
+		EventKindCheckpointCreated,
+	}
+	for _, kind := range nonRelevant {
+		if _, err := rt.Emit(ctx, RuntimeEventDraft{
+			RunID:   "run-adaptive-cache",
+			Kind:    kind,
+			Message: "non-relevant event",
+		}); err != nil {
+			t.Fatalf("Emit(%s) error = %v", kind, err)
+		}
+	}
+
+	// The next query must serve the cached snapshot: same BuildID and watermark,
+	// proving no recompute ran despite five appended events.
+	served, err := rt.WorldState(ctx, WorldStateQuery{RunID: "run-adaptive-cache"})
+	if err != nil {
+		t.Fatalf("WorldState() after non-relevant events error = %v", err)
+	}
+	if served.BuildID != warmBuildID {
+		t.Fatalf("non-relevant events invalidated the cache (BuildID %q -> %q); adaptive model should have kept it warm", warmBuildID, served.BuildID)
+	}
+	if served.SourceWatermark != warmWatermark {
+		t.Fatalf("non-relevant events advanced the watermark (%q -> %q); cache should not have recomputed", warmWatermark, served.SourceWatermark)
+	}
+
+	// Emit ONE projection-relevant event. This must invalidate the cache.
+	if _, err := rt.Emit(ctx, RuntimeEventDraft{
+		RunID:   "run-adaptive-cache",
+		Kind:    EventKindToolSucceeded,
+		Message: "relevant event: tool success",
+	}); err != nil {
+		t.Fatalf("Emit(tool.succeeded) error = %v", err)
+	}
+
+	// The next query must recompute: a different BuildID (wall-clock-derived, so
+	// it changes across recomputes even for the same logical watermark) and an
+	// advanced watermark reflecting the new event.
+	recomputed, err := rt.WorldState(ctx, WorldStateQuery{RunID: "run-adaptive-cache"})
+	if err != nil {
+		t.Fatalf("WorldState() after relevant event error = %v", err)
+	}
+	if recomputed.BuildID == served.BuildID {
+		t.Fatalf("relevant event did not invalidate the cache (BuildID unchanged at %q); tool.succeeded should have triggered a recompute", recomputed.BuildID)
+	}
+	if recomputed.SourceWatermark == served.SourceWatermark {
+		t.Fatalf("relevant event did not advance the watermark (%q); tool.succeeded should have raised it", recomputed.SourceWatermark)
 	}
 }
 

@@ -148,16 +148,16 @@ func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldS
 	selectedPartition := strings.TrimSpace(query.Partition)
 
 	// Fast path: for unfiltered queries, serve from the in-memory WorldState
-	// cache when it is fresh up to the latest event sequence. This avoids the
-	// full recompute (RebuildAll + ListEvents + 8-partition rebuild) on every
-	// query when no new events have been appended. See world_state_cache.go and
-	// docs/api/world-state.md Projection Determinism.
+	// cache when it is fresh up to the run's current projection-relevant event
+	// sequence. This avoids the full recompute (RebuildAll + ListEvents +
+	// 8-partition rebuild) on every query. The freshness watermark is the
+	// projection-relevant sequence (not MAX(sequence)), so high-frequency
+	// loop-internal events (heartbeats, model deltas, checkpoints) do NOT
+	// invalidate the cache — only state-changing events do. See
+	// world_state_cache.go and docs/api/world-state.md Read Cache.
 	if selectedPartition == "" {
-		maxSeq, err := r.maxEventSequence(ctx, runID)
-		if err == nil {
-			if cached, ok := r.wsCache.get(runID, maxSeq); ok {
-				return cached, nil
-			}
+		if cached, ok := r.wsCache.get(runID); ok {
+			return cached, nil
 		}
 	}
 
@@ -178,9 +178,7 @@ func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldS
 	// partition-narrowed external providers and are not safely derivable from a
 	// cached full snapshot.
 	if selectedPartition == "" {
-		if maxSeq, err := r.maxEventSequence(ctx, runID); err == nil {
-			r.wsCache.put(runID, snapshot, maxSeq)
-		}
+		r.wsCache.put(runID, snapshot)
 	}
 	return snapshot, nil
 }

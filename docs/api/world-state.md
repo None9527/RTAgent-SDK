@@ -103,12 +103,18 @@ This contract is regression-covered by `TestRuntimeWorldStateProjectionIsDetermi
 
 ## Read Cache
 
-`Runtime.WorldState` serves unfiltered queries from an in-memory cache when the cached snapshot is fresh up to the latest event sequence. This is a performance optimization layered over the determinism contract above; it does not change the projection result.
+`Runtime.WorldState` serves unfiltered queries from an in-memory cache using **projection-aware freshness**: the cache is invalidated only by events that can change a WorldState partition, not by every appended event. This makes host `Inspect` calls cheap during an active loop, where high-frequency events (model turns, heartbeats, checkpoints) would otherwise force a full recompute on every read.
 
-- **Cache hit (O(1))**: when `query.Partition` is empty and the cached full snapshot's `up_to_seq >= MAX(sequence)` for the run, the cache returns a deep copy. No event scan or partition rebuild runs.
-- **Cache miss**: the cache is cold, stale (a new event was appended since the snapshot was built), or the query is partition-filtered (filtered queries bypass the cache because external WorldState providers may narrow their output by partition). On miss, the full projection is recomputed and, for unfiltered queries, stored back into the cache.
-- **Invalidation**: the cache is invalidated implicitly by sequence growth (the freshness check compares against the authoritative `MAX(sequence)`) and explicitly by run/session lifecycle events that change projected state outside the event journal.
-- **Isolation**: every cache read returns an independent deep copy (JSON round-trip), so callers cannot observe or corrupt later incremental mutations. This is regression-covered by `TestRuntimeWorldStateSnapshotCacheServesStableAndInvalidatesOnGrowth`.
+- **Projection-relevant events** (the only kinds that invalidate the cache): `context.packet.created`, `tool.invoked`, `tool.succeeded`, `tool.failed`, `activity.started`, `activity.completed`, `permission.requested`, `permission.granted`, `permission.denied`, `turn.completed`, `turn.failed`, `turn.cancelled`, `run.interrupted`. These are the kinds the partition functions consume.
+- **Non-relevant events** (do NOT invalidate): `run.heartbeat`, `model.requested`, `model.responded`, `model.delta`, `checkpoint.created`, `agent.started`, `run.created`, `session.started`, `session.ended`, `turn.started`, `agent.plan.proposed`. The cache stays warm across these.
+- **Cache hit (O(1))**: when `query.Partition` is empty and the cached full snapshot's `up_to_proj_seq >=` the run's current highest projection-relevant sequence, the cache returns a deep copy. No event scan or partition rebuild runs.
+- **Cache miss**: the cache is cold, a projection-relevant event has arrived since the snapshot was built, or the query is partition-filtered (filtered queries bypass the cache because external WorldState providers may narrow their output by partition). On miss, the full projection is recomputed and, for unfiltered queries, stored back into the cache.
+- **Invalidation signal**: the Emit path advances a per-run projection-relevant sequence watermark (`observeEvent`), which the cache checks. Run/session lifecycle events that change projected state outside the event journal call explicit `invalidate`.
+- **Isolation**: every cache read returns an independent deep copy (JSON round-trip), so callers cannot observe or corrupt later incremental mutations.
+
+Correctness is regression-covered by:
+- `TestRuntimeWorldStateSnapshotCacheServesStableAndInvalidatesOnGrowth` — stable serve, deep-copy isolation, and invalidation on a relevant event.
+- `TestRuntimeWorldStateCacheAdaptiveInvalidationRespectsEventRelevance` — non-relevant events keep the cache warm (same BuildID/watermark); a relevant event forces a recompute (changed BuildID, advanced watermark).
 
 The cache is in-process and per-`Runtime`-instance; it is not durable across process restarts. A cold start recomputes once and repopulates. Persistent snapshotting (checkpoints on the event log) is a planned follow-up to bound cold-start cost for long runs.
 

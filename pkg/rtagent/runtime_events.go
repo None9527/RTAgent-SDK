@@ -158,17 +158,7 @@ func (r *Runtime) nextEventSequence(ctx context.Context, runID string) (int64, e
 }
 
 func (r *Runtime) maxEventSequence(ctx context.Context, runID string) (int64, error) {
-	records, err := r.kernel.store.ListRuntimeEvents(ctx, runID)
-	if err != nil {
-		return 0, fmt.Errorf("list runtime events: %w", err)
-	}
-	var maxSeq int64
-	for _, rec := range records {
-		if rec.Sequence > maxSeq {
-			maxSeq = rec.Sequence
-		}
-	}
-	return maxSeq, nil
+	return r.kernel.store.MaxEventSequence(ctx, runID)
 }
 
 func eventEnvelopeFromRecord(rec persistence.RuntimeEventRecord) RuntimeEventEnvelope {

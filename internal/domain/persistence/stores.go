@@ -22,6 +22,7 @@ type CheckpointStore interface {
 type RuntimeEventStore interface {
 	AppendRuntimeEvent(ctx context.Context, rec RuntimeEventRecord) error
 	ListRuntimeEvents(ctx context.Context, runID string) ([]RuntimeEventRecord, error)
+	MaxEventSequence(ctx context.Context, runID string) (int64, error)
 }
 
 type MemoryStore interface {

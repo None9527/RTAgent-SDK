@@ -95,3 +95,20 @@ func (b *SQLiteBundle) ListRuntimeEvents(ctx context.Context, runID string) ([]p
 	}
 	return results, nil
 }
+
+// MaxEventSequence returns the highest event sequence for a run via a DB
+// aggregate query (O(log N) with the index) instead of loading every event
+// row into memory. Used for next-sequence allocation and cache-freshness
+// checks.
+func (b *SQLiteBundle) MaxEventSequence(ctx context.Context, runID string) (int64, error) {
+	var maxSeq int64
+	err := b.db.WithContext(ctx).
+		Model(&EventModel{}).
+		Where("run_id = ?", runID).
+		Select("COALESCE(MAX(sequence), 0)").
+		Scan(&maxSeq).Error
+	if err != nil {
+		return 0, err
+	}
+	return maxSeq, nil
+}

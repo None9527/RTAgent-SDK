@@ -1,38 +1,25 @@
 package worldstate
 
-import (
-	"context"
-
-	"rtagent/internal/domain/persistence"
-)
-
 type Partition string
 
 const (
 	PartitionActivity   Partition = "activity"
 	PartitionTask       Partition = "task"
-	PartitionCapability Partition = "capability"
 	PartitionGovernance Partition = "governance"
-	PartitionMemory     Partition = "memory"
-	PartitionContext     Partition = "context"
-	PartitionHypothesis Partition = "hypothesis"
 	PartitionArtifact   Partition = "artifact"
 )
 
-type WorldStateQuery struct {
-	RunID     string    `json:"run_id,omitempty"`
-	Partition Partition `json:"partition,omitempty"`
-	Subject   string    `json:"subject,omitempty"`
-}
-
-type ProjectionQuery interface {
-	GetWorldStateSnapshot(ctx context.Context, runID string) ([]persistence.WorldStateEntry, error)
-	GetWorldStatePartition(ctx context.Context, runID string, partition Partition) ([]persistence.WorldStateEntry, error)
-	Rebuild(ctx context.Context, runID string) error
-}
-
-type WorldStateBuilder interface {
-	HandleEvent(ctx context.Context, kind string, runID string, seq int64, payload []byte) error
-	RebuildAll(ctx context.Context, runID string) error
-	GetLatestSnapshot(ctx context.Context, runID string) ([]persistence.WorldStateEntry, error)
+type Entry struct {
+	ID           string   `json:"id,omitempty"`
+	Partition    string   `json:"partition,omitempty"`
+	Kind         string   `json:"kind,omitempty"`
+	Subject      string   `json:"subject,omitempty"`
+	StateJSON    string   `json:"state_json,omitempty"`
+	Summary      string   `json:"summary,omitempty"`
+	SourceID     string   `json:"source_id,omitempty"`
+	SourceSeq    int64    `json:"source_seq,omitempty"`
+	Confidence   float64  `json:"confidence,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	ExpiresAt    string   `json:"expires_at,omitempty"`
+	Version      int64    `json:"version,omitempty"`
 }

@@ -8,9 +8,6 @@ type HandleKind string
 
 const (
 	HandleArtifact HandleKind = "artifact"
-	HandleEvidence HandleKind = "evidence"
-	HandleMemory   HandleKind = "memory"
-	HandleActivity HandleKind = "activity"
 )
 
 type ContextHandle struct {
@@ -30,8 +27,4 @@ type HandleRegistry interface {
 	Register(ctx context.Context, handle ContextHandle) error
 	Get(ctx context.Context, handleID string) (ContextHandle, error)
 	ListByRunID(ctx context.Context, runID string) ([]ContextHandle, error)
-}
-
-type Materializer interface {
-	Materialize(ctx context.Context, handleID string) (string, error)
 }

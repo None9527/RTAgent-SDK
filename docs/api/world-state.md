@@ -82,6 +82,25 @@ The memory partition projects non-invalidated committed memory records associate
 
 MCP and skill are treated as capability inventory sources. They are not separate truth owners and do not execute through WorldState. Host inventory providers expose source-watermarked visibility and authorization state; actual execution remains gated by `ToolProvider` and `PermissionCenter`.
 
+## Projection Determinism
+
+WorldState projection is deterministic for a given set of runtime facts, with one explicit exclusion: timestamp fields. This is a v1 stable contract.
+
+Stable (deterministic for identical input events and stored records):
+
+- `SnapshotID` — derived as `world:<runID>:<sourceWatermark>`.
+- `RuntimeEpoch` — derived from the highest event sequence.
+- `SourceWatermark` — derived from the highest event sequence.
+- Partition order — emitted in a fixed canonical order regardless of map iteration.
+- Within each partition, `Entries`, `Handles`, and `Warnings` are deterministically sorted.
+- Top-level `Handles` and legacy `Entries` are deterministically sorted.
+
+Explicitly non-deterministic (depend on wall-clock time at projection build):
+
+- `BuildID`, `GeneratedAt`, `BuiltAt` (top-level), and each partition's `BuiltAt`. These are derived from `time.Now()` at projection time, so they differ across two `WorldState` calls against identical facts. Hosts must not compare these fields for equality; they exist for diagnostics and ordering only.
+
+This contract is regression-covered by `TestRuntimeWorldStateProjectionIsDeterministicExcludingTimestamps`, which projects the same run twice and asserts equality after clearing the timestamp fields.
+
 ## Read/Write Separation
 
 WorldState write behavior is intentionally absent. Runtime facts are written through `SubmitRun`, `Run`, `Emit`, tool execution, permission resolution, context registration, and workspace APIs. Run-scoped writers such as `Emit`, context registration, non-read-only permission checks, and permission decisions validate the run before persisting derived facts. `WorldState(ctx, query)` rebuilds a view from those sources and is safe to call repeatedly.

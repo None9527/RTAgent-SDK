@@ -30,6 +30,7 @@ Runtime/SDK owner.
 - `bash scripts/audit_sdk_docs.sh`
 - `bash scripts/audit_sdk_examples.sh`
 - `GOCACHE=/private/tmp/rtagent-go-cache go test ./... -count=1`
+- `GOCACHE=/private/tmp/rtagent-go-cache go test ./... -race -count=1`
 - `GOCACHE=/private/tmp/rtagent-go-cache go vet ./...`
 - `go doc ./pkg/rtagent`
 - `GOCACHE=/private/tmp/rtagent-go-cache go run ./cmd/rtagent`
@@ -98,6 +99,9 @@ It should not be tagged `v1.0` until the remaining release gates below are expli
 | Release preflight script | Done | `scripts/release_preflight.sh`, `docs/release/release-process.md`; blocks local or invalid module paths, dirty worktree, tracked or root-level generated artifacts, package-doc policy drift, public API snapshot drift, SDK boundary drift, SDK shape/docs/examples drift, premature README/v1-readiness v1.0 on a local module path, and stale README/v1-readiness v0.2 or v1-candidate status after final module path migration |
 | Module path migration helper | Done | `scripts/set_module_path.sh --check <final module path>` validates release path shape without reading or mutating module state, and `--dry-run <final module path>` reports import rewrites before mutating `go.mod` or Go files |
 | Shared module path validation | Done | `scripts/lib/module_path.sh` is reused by `scripts/set_module_path.sh`, `scripts/release_preflight.sh`, and `scripts/validate_sdk.sh`, so final module path rules do not drift between migration, release gates, and validation cases; local, URL, host:port, credential-bearing, whitespace, double-slash, trailing-slash, and non-domain paths are rejected before release migration |
+| Concurrency safety contract and `-race` validation | Done | `docs/api/public-compatibility.md` Concurrency Contract documents that `Emit` is sequence-serialized within one `Runtime` while other facade methods carry no v1 concurrency guarantee; `scripts/validate_sdk.sh` runs `go test ./... -race`; covered by `TestRuntimeConcurrentEmitAndSubmitRunAreRaceFree` |
+| Model provider retry/failure semantics | Done | `docs/api/model-providers.md` Retry and Failure Semantics documents that the SDK does not retry provider failures and `ModelProviderErrorDetails.Retryable`/`RateLimited` are host-facing hints; covered by `TestOpenAIProviderSurfacesRetryableFlagsWithoutRetrying` (429 returned as-is, exactly one request) |
+| WorldState projection determinism contract | Done | `docs/api/world-state.md` Projection Determinism documents that partition order and `SnapshotID`/`RuntimeEpoch`/`SourceWatermark` are deterministic while `BuildID`/`GeneratedAt`/`BuiltAt` are wall-clock-derived; covered by `TestRuntimeWorldStateProjectionIsDeterministicExcludingTimestamps` |
 
 ## Remaining v1 Gates
 

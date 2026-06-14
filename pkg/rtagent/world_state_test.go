@@ -2,6 +2,7 @@ package rtagent
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"rtagent/internal/domain/persistence"
@@ -454,6 +455,64 @@ func TestRuntimeWorldStateProjectsHostProviders(t *testing.T) {
 	}
 	if !hasWorldStateHandle(snapshot, WorldStatePartitionCapability, "skill:planner") {
 		t.Fatalf("missing skill inventory handle")
+	}
+}
+
+func TestRuntimeWorldStateProjectionIsDeterministicExcludingTimestamps(t *testing.T) {
+	// v1 contract: WorldState projection is deterministic for identical input
+	// facts, except for wall-clock-derived timestamp fields. See
+	// docs/api/world-state.md Projection Determinism.
+	ctx := context.Background()
+	rt := openTestRuntime(t, func(cfg *Config) {
+		cfg.Host.Tools = []ToolProvider{&recordingToolProvider{
+			specs: []ToolSpec{{Name: "echo", Description: "echo", Namespace: "test", ProviderName: "recording", ReadOnly: true}},
+		}}
+	})
+
+	projection, err := rt.SubmitRun(ctx, SubmitRunRequest{
+		RunID:     "run-worldstate-determinism",
+		SessionID: "session-worldstate-determinism",
+		Input:     "project deterministic world state",
+	}, Identity{ActorID: "tester"})
+	if err != nil {
+		t.Fatalf("SubmitRun() error = %v", err)
+	}
+	if projection.Status != RuntimeStatusCompleted {
+		t.Fatalf("Status = %q, want %q", projection.Status, RuntimeStatusCompleted)
+	}
+
+	first, err := rt.WorldState(ctx, WorldStateQuery{RunID: "run-worldstate-determinism"})
+	if err != nil {
+		t.Fatalf("WorldState() first call error = %v", err)
+	}
+	second, err := rt.WorldState(ctx, WorldStateQuery{RunID: "run-worldstate-determinism"})
+	if err != nil {
+		t.Fatalf("WorldState() second call error = %v", err)
+	}
+
+	// Best-effort sanity note: timestamp fields MAY vary across calls (they are
+	// wall-clock-derived), but they are not guaranteed to differ when two calls
+	// land in the same RFC3339 second. The contract is that hosts must not rely
+	// on them; the structural comparison below is the actual assertion.
+	t.Logf("first BuiltAt=%q BuildID=%q; second BuiltAt=%q BuildID=%q", first.BuiltAt, first.BuildID, second.BuiltAt, second.BuildID)
+
+	clearTimestampFields(&first)
+	clearTimestampFields(&second)
+
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("WorldState projections differ after clearing timestamp fields:\nfirst:  %+v\nsecond: %+v", first, second)
+	}
+}
+
+// clearTimestampFields zeroes the wall-clock-derived fields documented as
+// non-deterministic in docs/api/world-state.md Projection Determinism, so two
+// projections of identical facts can be compared structurally.
+func clearTimestampFields(s *WorldStateSnapshot) {
+	s.BuildID = ""
+	s.GeneratedAt = ""
+	s.BuiltAt = ""
+	for i := range s.Partitions {
+		s.Partitions[i].BuiltAt = ""
 	}
 }
 

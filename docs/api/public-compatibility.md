@@ -38,11 +38,11 @@ The following `pkg/rtagent` surfaces are intended to be stable for v1 once the m
 - Runtime journal/read projection: `Runtime.Emit`, `Runtime.ListEvents`, `Runtime.Inspect`, `RuntimeEventDraft`, `RuntimeEventEnvelope`, `EventQuery`, `InspectQuery`, and schema constants such as `SchemaRuntimeEventEnvelopeV1`.
 - Session/checkpoint lifecycle: `InspectSession`, `SessionGraph`, `StopSession`, `CheckpointGraph`, `ResumeRun`, `ResolveApproval`, and their request/result/snapshot types.
 - Configuration and host ports: `Config`, `RuntimeConfig`, `HostPorts`, `ExecutionScope`, and `Identity`.
-- Model provider contract: `ModelProvider.CompleteTurn(ctx, req, stream)`, `ModelRequest`, `ModelMessage`, `ModelResponse`, `ModelStreamHandler`, `ModelStreamEvent`, `ModelUsage`, and stable stream event constants.
+- Model provider contract: `ModelProvider.CompleteTurn(ctx, req, stream)`, `ModelRequest`, `ModelMessage`, `ModelResponse`, `ModelStreamHandler`, `ModelStreamEvent`, `ModelUsage`, and stable stream event constants. The SDK does not retry provider failures; `ModelProviderErrorDetails.Retryable`/`RateLimited` are host-facing classification hints. See `docs/api/model-providers.md` Retry and Failure Semantics.
 - OpenAI-compatible provider constructor surface: `NewOpenAICompatibleProvider`, `OpenAICompatibleProviderConfig`, `NewDashScopeOpenAICompatibleProviderFromEnv`, and `NewDashScopeQwen37PlusProviderFromEnv`.
 - Tool provider contract: `ToolProvider`, `ToolRegistry`, `ToolSpec`, `ToolCall`, `ToolObservation`, `ToolOutputPolicy`, `ExecutionConstraints`, and tool schema hash/epoch semantics.
 - Permission contract: `PermissionCenter`, permission request/result/decision/snapshot types, permission modes, decision actions, grant scope semantics, and `PermissionRequiredError`.
-- WorldState read model: `WorldStateSnapshot`, `WorldStatePartition`, `WorldStateEntry`, `WorldStateHandle`, `CapabilityState`, partition constants, and source-watermark/read-only semantics.
+- WorldState read model: `WorldStateSnapshot`, `WorldStatePartition`, `WorldStateEntry`, `WorldStateHandle`, `CapabilityState`, partition constants, and source-watermark/read-only semantics. Projection ordering and `SnapshotID`/`RuntimeEpoch`/`SourceWatermark` are deterministic for identical input; `BuildID`/`GeneratedAt`/`BuiltAt` are explicitly non-deterministic (wall-clock). See `docs/api/world-state.md` Projection Determinism.
 - WorldState query semantics: `WorldStateQuery.Partition` filters typed `Partitions`, top-level `Handles`, and legacy compatibility `Entries` by exact partition name.
 - Projection-only host inventory ports: `MemoryProvider`, `HypothesisProvider`, `MCPProvider`, `SkillProvider`, `WorldStateProvider`, and their function/adapter helpers.
 - Workspace/governance methods exposed through the SDK facade: `WriteFile`, `EvaluateProposal`, `WriteFileRequest`, `ArtifactRecord`, and `ProposedAction`.
@@ -64,6 +64,17 @@ Exported `EventKind*` constants describe event kinds generated or consumed by th
 `Runtime.Emit` is run-scoped. It rejects unknown run ids before appending, so host-defined events cannot create orphan journal facts outside the SDK run/session graph.
 
 Run-scoped mutation APIs are stable error semantics. `RegisterContextHandle` rejects unknown `ContextHandle.RunID` before mutating the context registry, and `CheckPermission`/`ResolvePermission` reject unknown scoped run ids before creating permission requests, reviewer decisions, grants, or permission events. Non-read-only permission checks require an existing run because they can authorize SDK side effects.
+
+## Concurrency Contract
+
+The SDK's in-process concurrency guarantees are part of the v1 stable surface:
+
+- `Runtime.Emit` is sequence-serialized within a single `Runtime` instance. Concurrent `Emit` calls are assigned contiguous, non-overlapping event sequences, enforced by an internal mutex around sequence allocation and journal append. This serialization does not extend to the post-append event-bus publish, and it does not hold across `Runtime` instances or across processes.
+- Other `Runtime` facade methods (`SubmitRun`, `Run`, `Inspect`, `ListEvents`, `WorldState`, `SessionGraph`, `CheckpointGraph`, `ResumeRun`, `ResolveApproval`, `CheckPermission`, `ResolvePermission`, `StopSession`, `InterruptRun`, and side-effecting `WriteFile`/`RegisterContextHandle`/`EvaluateProposal`) carry no v1 concurrency guarantee. A single `Runtime` instance is intended for use by one owner; hosts that dispatch run intake, reads, or mutations from multiple goroutines must serialize those calls themselves.
+- `Runtime.Close` is idempotent and safe to call concurrently; every public facade method returns `ErrRuntimeClosed` once `Close` has completed.
+- Multi-process writers sharing a single SQLite DSN are not a v1 capability; in-process sequence serialization is committed, cross-process sequence allocation is not.
+
+These guarantees are regression-covered by concurrent `-race` validation in `scripts/validate_sdk.sh` and `TestRuntimeConcurrentEmitAndSubmitRunAreRaceFree`.
 
 ## Additive Changes Allowed In v1.x
 

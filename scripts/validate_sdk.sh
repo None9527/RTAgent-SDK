@@ -85,6 +85,9 @@ bash scripts/audit_sdk_examples.sh
 echo "==> go test ./... -count=1"
 go test ./... -count=1
 
+echo "==> go test ./... -race -count=1"
+go test ./... -race -count=1
+
 echo "==> go vet ./..."
 go vet ./...
 

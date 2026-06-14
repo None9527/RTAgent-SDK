@@ -91,6 +91,9 @@ func (r *Runtime) runModelToolLoop(ctx context.Context, state loopContinuation, 
 	if len(state.Messages) == 0 {
 		state.Messages = initialModelMessages(packet.Input)
 	}
+	convergence := newConvergenceController()
+	finalizing := false
+	finalizationReason := ""
 	for {
 		// Apply the configured context-message window before each model turn.
 		// This bounds conversation growth so a long multi-tool run cannot
@@ -146,13 +149,41 @@ func (r *Runtime) runModelToolLoop(ctx context.Context, state loopContinuation, 
 			Input:        packet.Input,
 			Context:      packet,
 			Messages:     append([]ModelMessage(nil), state.Messages...),
-			ToolSpecs:    append([]ToolSpec(nil), packet.ToolSpecs...),
+			ToolSpecs:    convergenceToolSpecs(finalizing, packet.ToolSpecs),
 			Observations: append([]ToolObservation(nil), state.Observations...),
 			Iteration:    state.Iteration,
 			Events:       append([]RuntimeEventEnvelope(nil), packet.Events...),
 		})
 		if err != nil {
 			return r.failRun(ctx, scope, activityID, "model_turn_failed", err)
+		}
+		// In finalization mode the model was asked to produce a final answer
+		// (tools stripped). Route directly to completion regardless of any
+		// tool calls in the response — they are discarded by design.
+		if finalizing {
+			if _, err := r.appendLoopCheckpoint(ctx, scope, checkpointNodeTerminal, "complete", "", checkpointStatusTerminal, state, map[string]any{
+				"status":             RuntimeStatusCompleted,
+				"finalization":       true,
+				"convergence_reason": finalizationReason,
+			}); err != nil {
+				return r.failRun(ctx, scope, activityID, "checkpoint_terminal_failed", err)
+			}
+			if _, err := r.Emit(ctx, RuntimeEventDraft{
+				RunID:   scope.RunID,
+				Kind:    EventKindTurnCompleted,
+				Message: "Convergence finalization completed",
+				Payload: map[string]any{
+					"session_id":          scope.SessionID,
+					"finalization":        true,
+					"convergence_reason":  finalizationReason,
+					"ignored_tool_calls":  len(response.ToolCalls),
+					"output_preview":      previewString(response.Output, 500),
+				},
+			}); err != nil {
+				return r.failRun(ctx, scope, activityID, "finalization_event_failed", err)
+			}
+			response.ToolCalls = nil
+			return r.completeRun(ctx, scope, activityID, response)
 		}
 		if _, err := r.Emit(ctx, RuntimeEventDraft{
 			RunID:   scope.RunID,
@@ -232,6 +263,51 @@ func (r *Runtime) runModelToolLoop(ctx context.Context, state loopContinuation, 
 		projection, suspended, err := r.executeToolCallsWithPermission(ctx, &state, activityID, response.ToolCalls, state.ToolRounds)
 		if suspended || err != nil {
 			return projection, err
+		}
+		// Convergence control: observe this tool turn and decide whether to
+		// steer the loop. The controller tracks tool-interaction signatures
+		// across the run; see convergence.go.
+		newObservationCount := len(response.ToolCalls)
+		var roundObservations []ToolObservation
+		if newObservationCount > 0 && len(state.Observations) >= newObservationCount {
+			roundObservations = state.Observations[len(state.Observations)-newObservationCount:]
+		}
+		decision := convergence.observe(state.Iteration+1, r.maxToolIterations, response.ToolCalls, roundObservations)
+		if decision.ShouldFinalize {
+			finalizing = true
+			finalizationReason = decision.Reason
+			state.Messages = append(state.Messages, ModelMessage{Role: "user", Content: convergenceFinalizationMessage(decision)})
+			if _, err := r.Emit(ctx, RuntimeEventDraft{
+				RunID:   scope.RunID,
+				Kind:    EventKindRunHeartbeat,
+				Message: "Convergence finalization requested",
+				Payload: map[string]any{
+					"session_id":         scope.SessionID,
+					"kind":               "runtime.convergence_finalize",
+					"convergence_reason": decision.Reason,
+					"detail":             decision.Detail,
+					"iteration":          state.Iteration,
+				},
+			}); err != nil {
+				return r.failRun(ctx, scope, activityID, "convergence_finalize_event_failed", err)
+			}
+		} else if decision.ShouldReplan {
+			state.Messages = append(state.Messages, ModelMessage{Role: "user", Content: convergenceReplanMessage(decision)})
+			if _, err := r.Emit(ctx, RuntimeEventDraft{
+				RunID:   scope.RunID,
+				Kind:    EventKindRunHeartbeat,
+				Message: "Convergence replan requested",
+				Payload: map[string]any{
+					"session_id":           scope.SessionID,
+					"kind":                 "runtime.convergence_replan",
+					"convergence_reason":   decision.Reason,
+					"detail":               decision.Detail,
+					"iteration":            state.Iteration,
+					"tools_remain_enabled": true,
+				},
+			}); err != nil {
+				return r.failRun(ctx, scope, activityID, "convergence_replan_event_failed", err)
+			}
 		}
 		state.Iteration++
 	}

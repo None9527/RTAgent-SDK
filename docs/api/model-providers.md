@@ -71,6 +71,27 @@ The SDK loop accumulates conversation messages across iterations (user input, as
 
 This is regression-covered by `TestTrimMessagesToWindow*` (pure function) and `TestRuntimeLoopTrimsMessagesToConfiguredWindow` (end-to-end).
 
+## Convergence Control
+
+The loop tracks tool-interaction signatures across a run to detect when the model is stuck, and steers it toward a graceful exit instead of spinning until the hard iteration limit. The convergence controller runs after every tool turn and can take one of three actions:
+
+- **Continue (no action):** the turn produced novel observations. Normal loop behavior.
+- **Replan (advisory steering message):** the model is repeating the same tool interaction (≥3 times) or has produced no novel observation for several turns past an exploration floor. A user-role steering message is injected asking the model to compress evidence and either answer or make one precise non-repetitive observation. Tools remain available. Each replan reason fires at most once per run (deduped); if the model keeps stalling, the loop falls through to the finalize backstop.
+- **Finalize (tools stripped, final answer required):** the loop is about to hit the hard iteration limit (`MaxToolIterations`). The controller fires a pre-flush finalize one iteration before the limit, injects a finalization message, and strips tools from the next model request so the model must produce a text answer. The run then completes normally — it never fails with a hard-limit error.
+
+**Guarantees:**
+- The loop always finds a graceful exit: either the model stops calling tools naturally, a replan steers it to convergence, or the finalize backstop forces a final answer. A run never ends with `tool_iteration_limit_exceeded`.
+- Replan messages are deduped per reason, so a persistently stalling model is steered once, then falls through to the guaranteed finalize.
+- Finalize strips tools, so the model cannot keep calling tools in its final turn — any tool calls in the finalization response are discarded.
+
+**Thresholds (conservative defaults, not host-tunable in v1):**
+- Repeat detection: same tool call + observation signature seen ≥3 times → replan.
+- No-progress floor: iteration ≥12 before no-progress streak is checked.
+- No-progress threshold: ≥3 consecutive turns with no novel signature → replan.
+- Hard-budget pre-flush: fires at `MaxToolIterations - 1`.
+
+This is regression-covered by `TestConvergence*` (pure controller: repeat detection, novel distinction, replan dedup, hard-budget pre-flush, no-progress) and `TestRuntimeLoopConvergence*` (end-to-end: repeated tool calls finalize with tools stripped and a completed status; convergence heartbeat events are emitted).
+
 ## DashScope
 
 DashScope OpenAI-compatible mode is configured through:

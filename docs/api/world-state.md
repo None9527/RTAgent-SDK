@@ -101,6 +101,17 @@ Explicitly non-deterministic (depend on wall-clock time at projection build):
 
 This contract is regression-covered by `TestRuntimeWorldStateProjectionIsDeterministicExcludingTimestamps`, which projects the same run twice and asserts equality after clearing the timestamp fields.
 
+## Read Cache
+
+`Runtime.WorldState` serves unfiltered queries from an in-memory cache when the cached snapshot is fresh up to the latest event sequence. This is a performance optimization layered over the determinism contract above; it does not change the projection result.
+
+- **Cache hit (O(1))**: when `query.Partition` is empty and the cached full snapshot's `up_to_seq >= MAX(sequence)` for the run, the cache returns a deep copy. No event scan or partition rebuild runs.
+- **Cache miss**: the cache is cold, stale (a new event was appended since the snapshot was built), or the query is partition-filtered (filtered queries bypass the cache because external WorldState providers may narrow their output by partition). On miss, the full projection is recomputed and, for unfiltered queries, stored back into the cache.
+- **Invalidation**: the cache is invalidated implicitly by sequence growth (the freshness check compares against the authoritative `MAX(sequence)`) and explicitly by run/session lifecycle events that change projected state outside the event journal.
+- **Isolation**: every cache read returns an independent deep copy (JSON round-trip), so callers cannot observe or corrupt later incremental mutations. This is regression-covered by `TestRuntimeWorldStateSnapshotCacheServesStableAndInvalidatesOnGrowth`.
+
+The cache is in-process and per-`Runtime`-instance; it is not durable across process restarts. A cold start recomputes once and repopulates. Persistent snapshotting (checkpoints on the event log) is a planned follow-up to bound cold-start cost for long runs.
+
 ## Read/Write Separation
 
 WorldState write behavior is intentionally absent. Runtime facts are written through `SubmitRun`, `Run`, `Emit`, tool execution, permission resolution, context registration, and workspace APIs. Run-scoped writers such as `Emit`, context registration, non-read-only permission checks, and permission decisions validate the run before persisting derived facts. `WorldState(ctx, query)` rebuilds a view from those sources and is safe to call repeatedly.

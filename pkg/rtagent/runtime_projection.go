@@ -145,6 +145,22 @@ func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldS
 	if err := r.ensureRunExists(ctx, runID); err != nil {
 		return WorldStateSnapshot{}, err
 	}
+	selectedPartition := strings.TrimSpace(query.Partition)
+
+	// Fast path: for unfiltered queries, serve from the in-memory WorldState
+	// cache when it is fresh up to the latest event sequence. This avoids the
+	// full recompute (RebuildAll + ListEvents + 8-partition rebuild) on every
+	// query when no new events have been appended. See world_state_cache.go and
+	// docs/api/world-state.md Projection Determinism.
+	if selectedPartition == "" {
+		maxSeq, err := r.maxEventSequence(ctx, runID)
+		if err == nil {
+			if cached, ok := r.wsCache.get(runID, maxSeq); ok {
+				return cached, nil
+			}
+		}
+	}
+
 	if err := r.kernel.wsBuilder.RebuildAll(ctx, runID); err != nil {
 		return WorldStateSnapshot{}, err
 	}
@@ -156,5 +172,15 @@ func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldS
 	if err != nil {
 		return WorldStateSnapshot{}, err
 	}
-	return r.buildWorldStateSnapshot(ctx, runID, strings.TrimSpace(query.Partition), entries, events), nil
+	snapshot := r.buildWorldStateSnapshot(ctx, runID, selectedPartition, entries, events)
+
+	// Cache only full (unfiltered) snapshots; filtered results depend on
+	// partition-narrowed external providers and are not safely derivable from a
+	// cached full snapshot.
+	if selectedPartition == "" {
+		if maxSeq, err := r.maxEventSequence(ctx, runID); err == nil {
+			r.wsCache.put(runID, snapshot, maxSeq)
+		}
+	}
+	return snapshot, nil
 }

@@ -32,6 +32,8 @@ type Runtime struct {
 	closeOnce sync.Once
 	closeErr  error
 	closed    atomic.Bool
+
+	wsCache *worldStateCache
 }
 
 func Open(ctx context.Context, cfg Config) (*Runtime, error) {
@@ -89,6 +91,7 @@ func newRuntimeFromKernel(runtimeCfg RuntimeConfig, workDir string, host HostPor
 		worldStateProviders: append([]WorldStateProvider(nil), host.WorldState...),
 		maxToolIterations:   maxToolIterations,
 		runLeaseTTL:         runLeaseTTL,
+		wsCache:             newWorldStateCache(),
 	}
 }
 

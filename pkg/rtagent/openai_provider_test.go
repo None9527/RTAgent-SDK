@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -324,6 +325,51 @@ func TestOpenAICompatibleProviderMapsHTTPError(t *testing.T) {
 	}
 	if details.Message != "bad key" {
 		t.Fatalf("details Message = %q, want bad key", details.Message)
+	}
+}
+
+func TestOpenAIProviderSurfacesRetryableFlagsWithoutRetrying(t *testing.T) {
+	// v1 contract: the SDK does not retry provider failures. A 429 must be
+	// returned as-is with Retryable/RateLimited classification hints, and the
+	// provider must issue exactly one HTTP request (no retry loop). See
+	// docs/api/model-providers.md Retry and Failure Semantics.
+	var requests int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"code":"Throttling","message":"rate limited"}}`))
+	}))
+	defer server.Close()
+
+	provider, err := NewOpenAICompatibleProvider(OpenAICompatibleProviderConfig{
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+		Model:   "test-model",
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAICompatibleProvider() error = %v", err)
+	}
+
+	_, err = provider.CompleteTurn(context.Background(), ModelRequest{Input: "hello"}, nil)
+	if err == nil {
+		t.Fatalf("CompleteTurn() error = nil, want provider error for 429")
+	}
+	var modelErr ModelProviderError
+	if !errors.As(err, &modelErr) {
+		t.Fatalf("error does not implement ModelProviderError")
+	}
+	details := modelErr.ModelProviderErrorDetails()
+	if details.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("StatusCode = %d, want 429", details.StatusCode)
+	}
+	if !details.Retryable {
+		t.Fatalf("Retryable = false, want true for 429")
+	}
+	if !details.RateLimited {
+		t.Fatalf("RateLimited = false, want true for 429")
+	}
+	if got := atomic.LoadInt32(&requests); got != 1 {
+		t.Fatalf("provider issued %d requests, want exactly 1 (SDK must not retry)", got)
 	}
 }
 

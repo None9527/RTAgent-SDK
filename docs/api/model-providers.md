@@ -47,6 +47,17 @@ Runtime/SDK owner.
 - OpenAI-compatible errors: non-2xx responses implement `ModelProviderError`; hosts should read `ModelProviderErrorDetails` instead of depending on provider-specific concrete error types.
 - Core-loop error projection: when a provider error fails a runtime turn, the SDK keeps `RuntimeError.Code` as the SDK failure code such as `model_turn_failed`, and copies `ModelProviderErrorDetails` into additive `RuntimeError` fields: `Provider`, `StatusCode`, `ProviderCode`, `Retryable`, `RateLimited`, `SafeForModel`, and `BodyPreview`. The same fields are also emitted on the `turn.failed` event payload so hosts can drive retry/backoff UI without parsing error strings.
 
+## Retry and Failure Semantics
+
+The SDK does not retry model provider failures. This is a v1 stable contract, not an omission:
+
+- `CompleteTurn` issues a single provider call. On a non-2xx response, the OpenAI-compatible provider maps it to a `ModelProviderError` and returns immediately — there is no retry loop, attempt counter, backoff, or `Retry-After` honoring anywhere in the SDK model path.
+- `ModelProviderErrorDetails.Retryable` and `RateLimited` are classification hints for the host, not SDK actions. The OpenAI-compatible provider sets `Retryable=true` for HTTP 429 and any 5xx, and `RateLimited=true` for HTTP 429 specifically.
+- Hosts own retry policy. Because provider failures surface as structured `ModelProviderErrorDetails` on both the returned `RuntimeError` and the `turn.failed` event payload, hosts can decide whether and how to retry (exponential backoff, jitter, budget) without parsing error strings or re-deriving the rate-limit classification.
+- A failed turn transitions the run to terminal `failed`; the SDK does not auto-resubmit. Hosts that want to retry submit a new run.
+
+This is regression-covered by `TestOpenAIProviderSurfacesRetryableFlagsWithoutRetrying`, which asserts a 429 response is returned as-is (no second request) with `Retryable=true` and `RateLimited=true`.
+
 ## DashScope
 
 DashScope OpenAI-compatible mode is configured through:

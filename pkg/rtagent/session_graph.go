@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/None9527/RTAgent/internal/domain/persistence"
+	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
 )
 
 func (r *Runtime) SessionGraph(ctx context.Context, query SessionGraphQuery) (SessionGraphSnapshot, error) {

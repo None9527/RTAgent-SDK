@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	domainworld "github.com/None9527/RTAgent/internal/domain/worldstate"
+	domainworld "github.com/None9527/RTAgent-SDK/internal/domain/worldstate"
 )
 
 func worldStateEntryFromLegacy(entry domainworld.Entry, events []RuntimeEventEnvelope) WorldStateEntry {

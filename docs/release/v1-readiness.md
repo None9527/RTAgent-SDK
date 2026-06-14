@@ -43,7 +43,7 @@ Runtime/SDK owner.
 
 ## Current Decision
 
-Current implementation is **v0.0.1**, published at `github.com/None9527/RTAgent`. The module import path is finalized. This is the first public release — the kernel core loop, convergence control, context budget, WorldState adaptive cache, permission/approval, session lifecycle, checkpoint resume, and model capability-driven budget are all complete and regression-covered.
+Current implementation is **v0.0.1**, published at `github.com/None9527/RTAgent-SDK`. The module import path is finalized. This is the first public release — the kernel core loop, convergence control, context budget, WorldState adaptive cache, permission/approval, session lifecycle, checkpoint resume, and model capability-driven budget are all complete and regression-covered.
 
 The runtime SDK is usable for internal host integration and dogfooding. It has not yet been tagged `v1.0`; the remaining release gates below track the gap between v0.0.1 and v1.0 (primarily real-model multi-turn convergence validation and broader tentacle coverage).
 
@@ -105,8 +105,8 @@ The runtime SDK is usable for internal host integration and dogfooding. It has n
 
 | Gate | Status | Required Closure |
 |---|---|---|
-| Module import path | Done | Finalized to `github.com/None9527/RTAgent`; published at v0.0.1. |
-| Release naming | Done | Repository `RTAgent` at `github.com/None9527`; version v0.0.1. |
+| Module import path | Done | Finalized to `github.com/None9527/RTAgent-SDK`; published at v0.0.1. |
+| Release naming | Done | Repository `RTAgent-SDK` at `github.com/None9527`; version v0.0.1. |
 | README status | Done | README updated to v0.0.1. |
 | Final release validation pass | Done | `bash scripts/validate_sdk.sh` passes on the published module path. DashScope live integration verified with qwen3.6-plus (single-turn completed). |
 | DashScope live provider | Conditional | Single-turn verified with qwen3.6-plus; multi-turn tool-call convergence under a real model is a v1.0 gate, not v0.0.1. |

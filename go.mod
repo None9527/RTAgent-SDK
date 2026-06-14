@@ -1,4 +1,4 @@
-module github.com/None9527/RTAgent
+module github.com/None9527/RTAgent-SDK
 
 go 1.21
 

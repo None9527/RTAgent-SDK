@@ -68,7 +68,7 @@ Runtime/SDK owner.
 
 ## Current Blockers
 
-- Module path is finalized (`github.com/None9527/RTAgent`) and published at v0.0.1. No blockers for v0.0.1.
+- Module path is finalized (`github.com/None9527/RTAgent-SDK`) and published at v0.0.1. No blockers for v0.0.1.
 - Remaining v1.0 gates: real-model multi-turn tool-call convergence and tentacle coverage (see `docs/release/v1-readiness.md`).
 
 ## Evidence

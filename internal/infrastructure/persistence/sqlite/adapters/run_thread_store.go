@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/None9527/RTAgent/internal/domain/persistence"
+	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
 )
 
 func (b *SQLiteBundle) PutRun(ctx context.Context, rec persistence.RunRecord) error {

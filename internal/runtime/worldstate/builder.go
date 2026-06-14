@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/None9527/RTAgent/internal/domain/persistence"
-	domainworld "github.com/None9527/RTAgent/internal/domain/worldstate"
-	"github.com/None9527/RTAgent/internal/runtime/events"
+	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
+	domainworld "github.com/None9527/RTAgent-SDK/internal/domain/worldstate"
+	"github.com/None9527/RTAgent-SDK/internal/runtime/events"
 )
 
 type WorldStateBuilder struct {

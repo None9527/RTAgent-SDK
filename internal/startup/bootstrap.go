@@ -8,13 +8,13 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/None9527/RTAgent/internal/domain/persistence"
-	"github.com/None9527/RTAgent/internal/infrastructure/persistence/sqlite/adapters"
-	"github.com/None9527/RTAgent/internal/runtime/contextengine"
-	"github.com/None9527/RTAgent/internal/runtime/events"
-	"github.com/None9527/RTAgent/internal/runtime/execution"
-	"github.com/None9527/RTAgent/internal/runtime/governance"
-	"github.com/None9527/RTAgent/internal/runtime/worldstate"
+	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
+	"github.com/None9527/RTAgent-SDK/internal/infrastructure/persistence/sqlite/adapters"
+	"github.com/None9527/RTAgent-SDK/internal/runtime/contextengine"
+	"github.com/None9527/RTAgent-SDK/internal/runtime/events"
+	"github.com/None9527/RTAgent-SDK/internal/runtime/execution"
+	"github.com/None9527/RTAgent-SDK/internal/runtime/governance"
+	"github.com/None9527/RTAgent-SDK/internal/runtime/worldstate"
 )
 
 type RuntimeContainer struct {

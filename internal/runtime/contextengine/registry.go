@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/None9527/RTAgent/internal/domain/contextual"
+	"github.com/None9527/RTAgent-SDK/internal/domain/contextual"
 )
 
 type LocalHandleRegistry struct {

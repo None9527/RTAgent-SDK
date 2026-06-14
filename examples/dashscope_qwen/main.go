@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	rtagent "github.com/None9527/RTAgent/pkg/rtagent"
+	rtagent "github.com/None9527/RTAgent-SDK/pkg/rtagent"
 )
 
 func main() {

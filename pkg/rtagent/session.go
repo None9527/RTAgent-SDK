@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/None9527/RTAgent/internal/domain/persistence"
+	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
 )
 
 func (r *Runtime) InspectSession(ctx context.Context, query SessionQuery) (SessionSnapshot, error) {

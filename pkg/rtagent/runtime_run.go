@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/None9527/RTAgent/internal/domain/persistence"
+	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
 )
 
 func (r *Runtime) SubmitRun(ctx context.Context, req SubmitRunRequest, ident Identity) (RuntimeStateProjection, error) {

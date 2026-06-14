@@ -68,9 +68,8 @@ Runtime/SDK owner.
 
 ## Current Blockers
 
-- Final Go module path has not been selected.
-- Worktree is intentionally dirty while SDK extraction work is in progress.
-- README and `docs/release/v1-readiness.md` must remain v0.2 / v1-candidate until release identity and packaging are finalized.
+- Final Go module path has not been selected; until it is chosen, `scripts/release_preflight.sh` intentionally fails on the local `rtagent` path. The mechanical migration is verified and read-only testable via `scripts/set_module_path.sh --check <path>` and `--dry-run <path>`.
+- README and `docs/release/v1-readiness.md` must remain v0.2 / v1-candidate until the final module path is applied; `scripts/release_preflight.sh` rejects both premature v1.0-on-local-path and stale v0.2-after-migration.
 - Final release-candidate validation must be rerun after module path and README status change.
 
 ## Evidence

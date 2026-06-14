@@ -162,7 +162,7 @@ RTAGENT_RUN_DASHSCOPE_INTEGRATION=1 go test ./pkg/rtagent -run TestDashScopeQwen
 
 ## Important Boundaries
 
-- Zero-config `Open(ctx, Config{})` uses ephemeral in-memory SQLite. Persistent hosts should pass `RuntimeConfig.DSN`.
+- Zero-config `Open(ctx, Config{})` uses ephemeral in-memory SQLite. For durable storage, either pass `RuntimeConfig.DSN` explicitly or inject `Config.RuntimeHome` (e.g. `DefaultUserHome("myagent")`) to resolve a persistent `~/.myagent/` directory automatically.
 - Run-scoped projections such as `PermissionSnapshot` and `WorldState` require an existing run id; use `SubmitRun` or `Run` to create run state first.
 - WorldState is a source-watermarked read projection, not a truth store.
 - Exported `EventKind*` constants cover SDK-owned runtime events; hosts can still emit custom journal event strings through `Runtime.Emit` for an existing run.
@@ -170,6 +170,26 @@ RTAGENT_RUN_DASHSCOPE_INTEGRATION=1 go test ./pkg/rtagent -run TestDashScopeQwen
 - The default model provider is deterministic and local. Real hosts should inject a real `ModelProvider`.
 - Kernel/store injection is not public in v1; use `Config.Host` ports for host extension.
 - Shared multi-process SQLite writers are not a committed v1 capability yet.
+
+## Runtime Home
+
+`Config.RuntimeHome` is the customization seam for "where does this runtime live on disk." It is a host-injected resolver that owns the directory convention (location, structure, permissions, creation). The SDK never creates directories itself.
+
+- **Durable zero-config:** inject `DefaultUserHome("myagent")` and `Open(ctx, Config{RuntimeHome: ...})` resolves `~/.myagent/` (or `$MYAGENT_HOME`) with `db/`, `workspace/`, `skills/`, `memory/`, `config/` subdirs and a durable SQLite at `db/myagent.db`.
+- **Fully customizable:** implement the `RuntimeHome` interface (or use `RuntimeHomeFunc`) for any convention — custom location, permissions, layout, or config-file format.
+- **Priority:** explicit `RuntimeConfig.DSN` wins; `RuntimeHome` is consulted only when DSN is empty.
+- **Shared layout for tentacles:** `Runtime.Home()` returns the resolved `RuntimeHomeLayout`, so host providers (skill, memory, MCP) can read `SkillsDir`/`MemoryDir`/`ConfigDir` to locate their data sources under a common root.
+
+```go
+rt, _ := rtagent.Open(ctx, rtagent.Config{
+    RuntimeHome: rtagent.DefaultUserHome("myagent"),
+    Host: rtagent.HostPorts{
+        Skill: rtagent.SkillProviderFunc(func(ctx context.Context, scope rtagent.ExecutionScope) ([]rtagent.CapabilityInventoryItem, error) {
+            return loadSkills(rt.Home().SkillsDir) // host reads the shared layout
+        }),
+    },
+})
+```
 
 ## Docs
 

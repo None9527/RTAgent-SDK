@@ -241,6 +241,13 @@ type CheckpointNode struct {
 type Config struct {
 	Runtime RuntimeConfig
 	Host    HostPorts
+	// RuntimeHome, when set, resolves a persistent home directory layout used
+	// when RuntimeConfig.DSN is empty. If nil and DSN is empty, the SDK falls
+	// back to ephemeral in-memory storage (current behavior, zero-breakage).
+	// Inject this to make zero-config Open durable AND to give host providers a
+	// shared directory convention. The SDK never creates directories itself —
+	// the injected RuntimeHome implementation owns directory creation.
+	RuntimeHome RuntimeHome
 }
 
 type ContextHandle struct {
@@ -660,6 +667,12 @@ func (r *Runtime) Emit(ctx context.Context, draft RuntimeEventDraft) (RuntimeEve
 
 func (r *Runtime) EvaluateProposal(ctx context.Context, agentID string, action ProposedAction, activeActivityID string) error
 
+func (r *Runtime) Home() RuntimeHomeLayout
+    Home returns the resolved runtime home directory layout, if one was
+    configured. Returns a zero-value RuntimeHomeLayout when no RuntimeHome was
+    set (ephemeral or explicit-DSN mode). Host providers can read this to locate
+    shared directories (skills, memory, config) under a common root.
+
 func (r *Runtime) Inspect(ctx context.Context, query InspectQuery) (RuntimeInspectSnapshot, error)
 
 func (r *Runtime) InspectSession(ctx context.Context, query SessionQuery) (SessionSnapshot, error)
@@ -753,6 +766,51 @@ type RuntimeEventEnvelope struct {
 	Message       string         `json:"message,omitempty"`
 	Payload       map[string]any `json:"payload,omitempty"`
 }
+
+type RuntimeHome interface {
+	// Resolve returns the resolved home layout. Called once during Open when
+	// RuntimeConfig.DSN is empty. If Resolve returns an error, Open fails.
+	Resolve(ctx context.Context) (RuntimeHomeLayout, error)
+}
+    RuntimeHome resolves a runtime home directory layout. It is the
+    customization seam for "where does this runtime live on disk" — hosts
+    inject an implementation that owns the directory convention (location,
+    structure, permissions, creation). See DefaultUserHome for a ready-to-use
+    implementation.
+
+func DefaultUserHome(appName string) RuntimeHome
+    DefaultUserHome returns a RuntimeHome that resolves ~/.<appName> (or
+    $<UPPER_APP_NAME>_HOME when set) and creates the standard subdirectory
+    layout: db/, workspace/, skills/, memory/, config/. The SQLite DSN points at
+    db/<appName>.db. Use this to make zero-config Open durable.
+
+type RuntimeHomeFunc func(ctx context.Context) (RuntimeHomeLayout, error)
+    RuntimeHomeFunc adapts a function to RuntimeHome for simple host
+    integrations.
+
+func (f RuntimeHomeFunc) Resolve(ctx context.Context) (RuntimeHomeLayout, error)
+
+type RuntimeHomeLayout struct {
+	// HomeDir is the root directory of the runtime home (e.g. ~/.myagent).
+	HomeDir string
+	// DSN is the SQLite data source name. The kernel consumes this.
+	DSN string
+	// WorkDir is the workspace path. The kernel consumes this when
+	// RuntimeConfig.WorkDir is empty.
+	WorkDir string
+	// SkillsDir is where skill inventory lives. Host SkillProvider reads this.
+	// Empty if the layout does not define a skills directory.
+	SkillsDir string
+	// MemoryDir is where memory store lives. Host MemoryProvider reads this.
+	// Empty if the layout does not define a memory directory.
+	MemoryDir string
+	// ConfigDir is where host config files live. Host reads this.
+	// Empty if the layout does not define a config directory.
+	ConfigDir string
+}
+    RuntimeHomeLayout is the resolved directory layout. The kernel consumes DSN
+    and WorkDir; host code (providers, examples) may read the other paths to
+    locate skills, memory, MCP configs, etc. All paths are absolute.
 
 type RuntimeInspectSnapshot struct {
 	SchemaVersion   string                 `json:"schema_version"`

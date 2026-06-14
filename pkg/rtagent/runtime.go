@@ -24,6 +24,7 @@ const defaultMaxToolIterations = 32
 type Runtime struct {
 	kernel  *runtimeKernel
 	workDir string
+	home    *RuntimeHomeLayout
 
 	modelProvider       ModelProvider
 	toolProvider        ToolProvider
@@ -45,7 +46,7 @@ type Runtime struct {
 }
 
 func Open(ctx context.Context, cfg Config) (*Runtime, error) {
-	runtimeCfg, workDir, err := normalizeRuntimeConfig(cfg.Runtime)
+	runtimeCfg, workDir, homeLayout, err := resolveRuntimeConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +54,47 @@ func Open(ctx context.Context, cfg Config) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newRuntimeFromKernel(runtimeCfg, workDir, cfg.Host, kernel), nil
+	rt := newRuntimeFromKernel(runtimeCfg, workDir, cfg.Host, kernel)
+	rt.home = homeLayout
+	return rt, nil
+}
+
+// resolveRuntimeConfig applies the RuntimeHome resolver (if configured) before
+// normalizing. When DSN is explicitly set, RuntimeHome is ignored — the host
+// has taken full control of storage. When DSN is empty and RuntimeHome is nil,
+// the ephemeral in-memory default is used (zero-breakage).
+func resolveRuntimeConfig(ctx context.Context, cfg Config) (RuntimeConfig, string, *RuntimeHomeLayout, error) {
+	runtimeCfg := cfg.Runtime
+	var homeLayout *RuntimeHomeLayout
+	if strings.TrimSpace(runtimeCfg.DSN) == "" && cfg.RuntimeHome != nil {
+		layout, err := cfg.RuntimeHome.Resolve(ctx)
+		if err != nil {
+			return RuntimeConfig{}, "", nil, fmt.Errorf("resolve runtime home: %w", err)
+		}
+		if strings.TrimSpace(layout.DSN) != "" {
+			runtimeCfg.DSN = layout.DSN
+		}
+		if strings.TrimSpace(runtimeCfg.WorkDir) == "" && strings.TrimSpace(layout.WorkDir) != "" {
+			runtimeCfg.WorkDir = layout.WorkDir
+		}
+		homeLayout = &layout
+	}
+	normalized, workDir, err := normalizeRuntimeConfig(runtimeCfg)
+	if err != nil {
+		return RuntimeConfig{}, "", nil, err
+	}
+	return normalized, workDir, homeLayout, nil
+}
+
+// Home returns the resolved runtime home directory layout, if one was
+// configured. Returns a zero-value RuntimeHomeLayout when no RuntimeHome was
+// set (ephemeral or explicit-DSN mode). Host providers can read this to locate
+// shared directories (skills, memory, config) under a common root.
+func (r *Runtime) Home() RuntimeHomeLayout {
+	if r == nil || r.home == nil {
+		return RuntimeHomeLayout{}
+	}
+	return *r.home
 }
 
 func normalizeRuntimeConfig(runtimeCfg RuntimeConfig) (RuntimeConfig, string, error) {

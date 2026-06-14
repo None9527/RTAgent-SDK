@@ -14,6 +14,13 @@ import (
 
 var ErrRuntimeClosed = errors.New("rtagent runtime is closed")
 
+// defaultMaxToolIterations is the fallback iteration budget when
+// RuntimeConfig.MaxToolIterations is unset. It is a conservative middle ground
+// between ngoagent's minimum (16) and default (64) — enough for realistic
+// multi-step tool use without unbounded looping under the deterministic
+// placeholder provider. Hosts running real tasks should tune it explicitly.
+const defaultMaxToolIterations = 32
+
 type Runtime struct {
 	kernel  *runtimeKernel
 	workDir string
@@ -26,6 +33,7 @@ type Runtime struct {
 	skillProvider       SkillProvider
 	worldStateProviders []WorldStateProvider
 	maxToolIterations   int
+	maxContextMessages int
 	runLeaseTTL         time.Duration
 
 	eventMu   sync.Mutex
@@ -73,7 +81,11 @@ func newRuntimeFromKernel(runtimeCfg RuntimeConfig, workDir string, host HostPor
 	}
 	maxToolIterations := runtimeCfg.MaxToolIterations
 	if maxToolIterations <= 0 {
-		maxToolIterations = 4
+		maxToolIterations = defaultMaxToolIterations
+	}
+	maxContextMessages := runtimeCfg.MaxContextMessages
+	if maxContextMessages < 0 {
+		maxContextMessages = 0
 	}
 	runLeaseTTL := runtimeCfg.RunLeaseTTL
 	if runLeaseTTL <= 0 {
@@ -90,6 +102,7 @@ func newRuntimeFromKernel(runtimeCfg RuntimeConfig, workDir string, host HostPor
 		skillProvider:       host.Skill,
 		worldStateProviders: append([]WorldStateProvider(nil), host.WorldState...),
 		maxToolIterations:   maxToolIterations,
+		maxContextMessages:  maxContextMessages,
 		runLeaseTTL:         runLeaseTTL,
 		wsCache:             newWorldStateCache(),
 	}

@@ -468,8 +468,8 @@ func TestNewRuntimeFromKernelKeepsStartupContainerInternal(t *testing.T) {
 	if rt.modelProvider == nil {
 		t.Fatalf("modelProvider = nil, want default provider")
 	}
-	if rt.maxToolIterations != 4 {
-		t.Fatalf("maxToolIterations = %d, want 4", rt.maxToolIterations)
+	if rt.maxToolIterations != defaultMaxToolIterations {
+		t.Fatalf("maxToolIterations = %d, want %d", rt.maxToolIterations, defaultMaxToolIterations)
 	}
 	if rt.runLeaseTTL != 5*time.Minute {
 		t.Fatalf("runLeaseTTL = %s, want 5m", rt.runLeaseTTL)

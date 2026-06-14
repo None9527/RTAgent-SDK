@@ -92,6 +92,29 @@ func (r *Runtime) runModelToolLoop(ctx context.Context, state loopContinuation, 
 		state.Messages = initialModelMessages(packet.Input)
 	}
 	for {
+		// Apply the configured context-message window before each model turn.
+		// This bounds conversation growth so a long multi-tool run cannot
+		// overflow the model's context window. When MaxContextMessages is 0
+		// (default) this is a no-op. See loop_context_budget.go.
+		trimmed, dropped := r.trimMessagesIfConfigured(state.Messages)
+		state.Messages = trimmed
+		if dropped > 0 {
+			if _, err := r.Emit(ctx, RuntimeEventDraft{
+				RunID:   scope.RunID,
+				Kind:    EventKindContextCompacted,
+				Message: "Context message window applied",
+				Payload: map[string]any{
+					"session_id":    scope.SessionID,
+					"iteration":     state.Iteration,
+					"before_count":  len(state.Messages) + dropped,
+					"after_count":   len(state.Messages),
+					"dropped_count": dropped,
+					"window_limit":  r.maxContextMessages,
+				},
+			}); err != nil {
+				return r.failRun(ctx, scope, activityID, "context_compact_event_failed", err)
+			}
+		}
 		if r.modelProvider == nil {
 			return r.failRun(ctx, scope, activityID, "model_provider_missing", errors.New("model provider is required"))
 		}

@@ -58,6 +58,19 @@ The SDK does not retry model provider failures. This is a v1 stable contract, no
 
 This is regression-covered by `TestOpenAIProviderSurfacesRetryableFlagsWithoutRetrying`, which asserts a 429 response is returned as-is (no second request) with `Retryable=true` and `RateLimited=true`.
 
+## Context Budget
+
+The SDK loop accumulates conversation messages across iterations (user input, assistant turns, tool observations). Without a bound, a long multi-tool run grows the message history until it overflows the model's context window. `RuntimeConfig.MaxContextMessages` prevents this.
+
+- **Message-count window, not token budget.** The kernel intentionally avoids tokenizer coupling. The window counts messages, so it is imprecise but predictable and zero-dependency. Hosts should set it based on their model's context window and typical message size (e.g. 50 for a model with a generous window and compact tool outputs).
+- **Opt-in.** The default is `0` = no trimming; existing behavior is unchanged. Hosts running real models set `MaxContextMessages` explicitly.
+- **Trimming policy.** When the conversation exceeds the window, the loop keeps the first `role:"user"` message (the task context — losing it would make the model forget the objective) plus the most recent `MaxContextMessages-1` messages. Older middle messages are dropped.
+- **Irreversible and resume-visible.** Trimmed messages are gone from the loop state, so a checkpoint taken after trimming restores the trimmed window, not the full history. This is the correct trade-off for long conversations: the model sees the current window, consistent with what it saw before the run suspended.
+- **Observability.** Each trim emits a `context.compacted` event with `before_count`, `after_count`, `dropped_count`, and `window_limit`, so hosts can monitor context pressure.
+- **Iteration budget.** Separately, `RuntimeConfig.MaxToolIterations` (default 32) caps the number of tool-call rounds. Together these two bounds prevent both unbounded looping and unbounded context growth.
+
+This is regression-covered by `TestTrimMessagesToWindow*` (pure function) and `TestRuntimeLoopTrimsMessagesToConfiguredWindow` (end-to-end).
+
 ## DashScope
 
 DashScope OpenAI-compatible mode is configured through:

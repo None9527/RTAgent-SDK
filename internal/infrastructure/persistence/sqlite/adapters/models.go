@@ -7,14 +7,18 @@ import (
 type RunModel struct {
 	RunID          string    `gorm:"primaryKey;size:255"`
 	ResumeID       string    `gorm:"column:resume_id;size:255;index"`
+	RootRunID      string    `gorm:"size:255;index"`
+	ParentRunID    string    `gorm:"size:255;index"`
+	TaskID         string    `gorm:"size:255;index"`
 	UserObjective  string    `gorm:"type:text"`
 	IngressKind    string    `gorm:"size:64"`
 	Title          string    `gorm:"size:512"`
 	Status         string    `gorm:"size:64;index"`
 	Resolution     string    `gorm:"size:64;index"`
 	CreatedAt      time.Time `gorm:"index"`
+	UpdatedAt      time.Time `gorm:"index"`
 	CompletedAt    *time.Time
-	LastCheckpoint string    `gorm:"size:255"`
+	LastCheckpoint string `gorm:"size:255"`
 }
 
 func (RunModel) TableName() string { return "v2_runs" }
@@ -31,20 +35,6 @@ type ThreadModel struct {
 }
 
 func (ThreadModel) TableName() string { return "v2_threads" }
-
-type MessageModel struct {
-	MessageID   string    `gorm:"primaryKey;size:255"`
-	ResumeID    string    `gorm:"column:resume_id;size:255;index"`
-	RunID       string    `gorm:"size:255;index"`
-	Role        string    `gorm:"size:32"`
-	Kind        string    `gorm:"size:64"`
-	Sequence    int64     `gorm:"index"`
-	Content     string    `gorm:"type:text"`
-	PayloadJSON []byte    `gorm:"type:blob"`
-	CreatedAt   time.Time `gorm:"index"`
-}
-
-func (MessageModel) TableName() string { return "v2_messages" }
 
 type CheckpointModel struct {
 	RunID        string    `gorm:"primaryKey;size:255"`
@@ -72,51 +62,20 @@ type ActivityModel struct {
 	StartedAt        time.Time `gorm:"index"`
 	UpdatedAt        time.Time
 	CompletedAt      *time.Time
-	InputRefsJSON    string    `gorm:"type:text"`
-	OutputRefsJSON   string    `gorm:"type:text"`
-	EvidenceRefsJSON string    `gorm:"type:text"`
-	ErrorText        string    `gorm:"type:text"`
-	Authority        string    `gorm:"size:255"`
+	InputRefsJSON    string `gorm:"type:text"`
+	OutputRefsJSON   string `gorm:"type:text"`
+	EvidenceRefsJSON string `gorm:"type:text"`
+	ErrorText        string `gorm:"type:text"`
+	Authority        string `gorm:"size:255"`
 }
 
 func (ActivityModel) TableName() string { return "v2_activities" }
 
-type TaskModel struct {
-	TaskID           string     `gorm:"primaryKey;size:255"`
-	Objective        string     `gorm:"type:text"`
-	Status           string     `gorm:"size:64;index"`
-	DependenciesJSON string     `gorm:"type:text"`
-	ParentID         string     `gorm:"size:255;index"`
-	RunID            string     `gorm:"size:255;index"`
-	CreatedAt        time.Time  `gorm:"index"`
-	CompletedAt      *time.Time `gorm:"index"`
-}
-
-func (TaskModel) TableName() string { return "v2_tasks" }
-
-type EvidenceModel struct {
-	RecordID         string    `gorm:"primaryKey;size:255"`
-	RunID            string    `gorm:"size:255;index"`
-	ActivityID       string    `gorm:"size:255;index"`
-	Kind             string    `gorm:"size:64"`
-	Strength         string    `gorm:"size:32"`
-	ActionResult     string    `gorm:"type:text"`
-	Observation      string    `gorm:"type:text"`
-	ArtifactID       string    `gorm:"size:255;index"`
-	SourceKind       string    `gorm:"size:64"`
-	SourceRunID      string    `gorm:"size:255"`
-	SourceCheckpoint string    `gorm:"size:255"`
-	SourceRecordID   string    `gorm:"size:255"`
-	CreatedAt        time.Time `gorm:"index"`
-}
-
-func (EvidenceModel) TableName() string { return "v2_evidence_records" }
-
 type EventModel struct {
 	EventID          string    `gorm:"primaryKey;size:255"`
-	RunID            string    `gorm:"size:255;index"`
+	RunID            string    `gorm:"size:255;index;uniqueIndex:idx_runtime_events_run_sequence"`
 	Kind             string    `gorm:"size:64;index"`
-	Sequence         int64     `gorm:"index"`
+	Sequence         int64     `gorm:"index;uniqueIndex:idx_runtime_events_run_sequence"`
 	OccurredAt       time.Time `gorm:"index"`
 	Message          string    `gorm:"type:text"`
 	PayloadJSON      []byte    `gorm:"type:blob"`
@@ -131,7 +90,7 @@ type PermissionModel struct {
 	PermissionID   string     `gorm:"primaryKey;size:255"`
 	RunID          string     `gorm:"size:255;index"`
 	Subject        string     `gorm:"size:255"`
-	Scope          string     `gorm:"size:512"`
+	Scope          string     `gorm:"type:text"`
 	Granted        bool       `gorm:"index"`
 	AuthorizedBy   string     `gorm:"size:255"`
 	RequestedAt    time.Time  `gorm:"index"`
@@ -174,6 +133,18 @@ type CapabilityModel struct {
 
 func (CapabilityModel) TableName() string { return "v2_capabilities" }
 
+type ToolSchemaSnapshotModel struct {
+	SnapshotID      string `gorm:"primaryKey;size:255"`
+	RunID           string `gorm:"size:255;index"`
+	ContextPacketID string `gorm:"size:255;index"`
+	SchemaHash      string `gorm:"size:128;index"`
+	ToolCount       int
+	SnapshotJSON    string    `gorm:"type:text"`
+	CreatedAt       time.Time `gorm:"index"`
+}
+
+func (ToolSchemaSnapshotModel) TableName() string { return "v2_tool_schema_snapshots" }
+
 type MemoryModel struct {
 	RecordID         string    `gorm:"primaryKey;size:255"`
 	Stage            string    `gorm:"size:64;index"`
@@ -197,12 +168,12 @@ type MemoryModel struct {
 func (MemoryModel) TableName() string { return "v2_memory_records" }
 
 type ArtifactModel struct {
-	ArtifactID       string    `gorm:"primaryKey;size:255"`
-	RunID            string    `gorm:"size:255;index"`
-	ActivityID       string    `gorm:"size:255;index"`
-	Kind             string    `gorm:"size:64;index"`
-	FilePath         string    `gorm:"type:text"`
-	SHA256           string    `gorm:"size:64"`
+	ArtifactID       string `gorm:"primaryKey;size:255"`
+	RunID            string `gorm:"size:255;index"`
+	ActivityID       string `gorm:"size:255;index"`
+	Kind             string `gorm:"size:64;index"`
+	FilePath         string `gorm:"type:text"`
+	SHA256           string `gorm:"size:64"`
 	ByteSize         int64
 	PreviewText      string    `gorm:"type:text"`
 	SourceKind       string    `gorm:"size:64"`
@@ -213,33 +184,3 @@ type ArtifactModel struct {
 }
 
 func (ArtifactModel) TableName() string { return "v2_artifact_records" }
-
-type AuditModel struct {
-	AuditID          string    `gorm:"primaryKey;size:255"`
-	Actor            string    `gorm:"size:255;index"`
-	Action           string    `gorm:"size:64;index"`
-	Subject          string    `gorm:"size:512;index"`
-	Result           string    `gorm:"size:64;index"`
-	Timestamp        time.Time `gorm:"index"`
-	EvidenceRefsJSON string    `gorm:"type:text"`
-	PolicyApplied    string    `gorm:"type:text"`
-}
-
-func (AuditModel) TableName() string { return "v2_audit_logs" }
-
-type WorldStateModel struct {
-	ID              string    `gorm:"primaryKey;size:255"`
-	Partition       string    `gorm:"size:64;index"`
-	Kind            string    `gorm:"size:64;index"`
-	Subject         string    `gorm:"size:512;index"`
-	StateJSON       string    `gorm:"type:text"`
-	Summary         string    `gorm:"type:text"`
-	SourceID        string    `gorm:"size:255"`
-	SourceSeq       int64     `gorm:"index"`
-	Confidence      float64   `gorm:"index"`
-	EvidenceRefsJSON string   `gorm:"type:text"`
-	ExpiresAt       *time.Time `gorm:"index"`
-	Version         int64     `gorm:"default:1"`
-}
-
-func (WorldStateModel) TableName() string { return "v2_world_state_entries" }

@@ -8,23 +8,25 @@ import (
 type Kind string
 
 const (
-	KindRunCreated         Kind = "run.created"
-	KindAgentStarted       Kind = "agent.started"
-	KindAgentPlanProposed  Kind = "agent.plan.proposed"
-	KindPermissionRequested Kind = "permission.requested"
-	KindPermissionGranted   Kind = "permission.granted"
-	KindToolInvoked        Kind = "tool.invoked"
-	KindToolSucceeded      Kind = "tool.succeeded"
-	KindToolFailed         Kind = "tool.failed"
-	KindActivityStarted    Kind = "activity.started"
-	KindActivityCompleted  Kind = "activity.completed"
-	KindArtifactCreated    Kind = "artifact.created"
-	KindFileModified       Kind = "file.modified"
-	KindEvidenceRecorded   Kind = "evidence.recorded"
-	KindWorldStateInvalid  Kind = "worldstate.invalidated"
-	KindContextHandleNew   Kind = "context.handle.created"
-	KindTaskBlocked        Kind = "task.blocked"
-	KindTaskResumed        Kind = "task.resumed"
+	KindRunCreated           Kind = "run.created"
+	KindAgentStarted         Kind = "agent.started"
+	KindAgentPlanProposed    Kind = "agent.plan.proposed"
+	KindPermissionRequested  Kind = "permission.requested"
+	KindPermissionGranted    Kind = "permission.granted"
+	KindPermissionDenied     Kind = "permission.denied"
+	KindToolInvoked          Kind = "tool.invoked"
+	KindToolSucceeded        Kind = "tool.succeeded"
+	KindToolFailed           Kind = "tool.failed"
+	KindActivityStarted      Kind = "activity.started"
+	KindActivityCompleted    Kind = "activity.completed"
+	KindFileModified         Kind = "file.modified"
+	KindTaskBlocked          Kind = "task.blocked"
+	KindTaskResumed          Kind = "task.resumed"
+	KindSessionStarted       Kind = "session.started"
+	KindSessionEnded         Kind = "session.ended"
+	KindContextPacketCreated Kind = "context.packet.created"
+	KindModelRequested       Kind = "model.requested"
+	KindModelResponded       Kind = "model.responded"
 )
 
 type Event struct {
@@ -49,18 +51,20 @@ func (k Kind) Valid() bool {
 		KindAgentPlanProposed,
 		KindPermissionRequested,
 		KindPermissionGranted,
+		KindPermissionDenied,
 		KindToolInvoked,
 		KindToolSucceeded,
 		KindToolFailed,
 		KindActivityStarted,
 		KindActivityCompleted,
-		KindArtifactCreated,
 		KindFileModified,
-		KindEvidenceRecorded,
-		KindWorldStateInvalid,
-		KindContextHandleNew,
 		KindTaskBlocked,
-		KindTaskResumed:
+		KindTaskResumed,
+		KindSessionStarted,
+		KindSessionEnded,
+		KindContextPacketCreated,
+		KindModelRequested,
+		KindModelResponded:
 		return true
 	default:
 		return false

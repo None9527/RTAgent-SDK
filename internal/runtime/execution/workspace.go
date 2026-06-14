@@ -16,10 +16,10 @@ import (
 
 type ManagedWorkspace struct {
 	workDir string
-	store   persistence.Bundle
+	store   persistence.ArtifactStore
 }
 
-func NewManagedWorkspace(workDir string, store persistence.Bundle) *ManagedWorkspace {
+func NewManagedWorkspace(workDir string, store persistence.ArtifactStore) *ManagedWorkspace {
 	return &ManagedWorkspace{
 		workDir: filepath.Clean(workDir),
 		store:   store,

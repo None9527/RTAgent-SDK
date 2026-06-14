@@ -13,10 +13,14 @@ import (
 type LocalMaterializer struct {
 	mu       sync.RWMutex
 	registry contextual.HandleRegistry
-	store    persistence.Bundle
+	store    artifactReader
 }
 
-func NewLocalMaterializer(registry contextual.HandleRegistry, store persistence.Bundle) *LocalMaterializer {
+type artifactReader interface {
+	GetArtifact(ctx context.Context, artifactID string) (persistence.ArtifactRecord, error)
+}
+
+func NewLocalMaterializer(registry contextual.HandleRegistry, store artifactReader) *LocalMaterializer {
 	return &LocalMaterializer{
 		registry: registry,
 		store:    store,
@@ -36,17 +40,6 @@ func (m *LocalMaterializer) Materialize(ctx context.Context, handleID string) (s
 			return "", err
 		}
 		return art.Preview, nil
-	case contextual.HandleEvidence:
-		evList, err := m.store.ListEvidence(ctx, handle.RunID)
-		if err != nil {
-			return "", err
-		}
-		for _, ev := range evList {
-			if ev.RecordID == handle.SourceRef {
-				return ev.ActionResult, nil
-			}
-		}
-		return "", errors.New("evidence not found")
 	default:
 		return "", errors.New("unsupported handle kind for materialization")
 	}

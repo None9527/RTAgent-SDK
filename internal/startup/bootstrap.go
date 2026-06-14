@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"rtagent/internal/domain/persistence"
 	"rtagent/internal/infrastructure/persistence/sqlite/adapters"
@@ -21,7 +22,6 @@ type RuntimeContainer struct {
 	Store           persistence.Bundle
 	EventBus        *events.InProcessEventBus
 	LeaseManager    *governance.LocalLeaseManager
-	PermCenter      *governance.LocalPermissionCenter
 	ContextRegistry *contextengine.LocalHandleRegistry
 	Materializer    *contextengine.LocalMaterializer
 	Workspace       *execution.ManagedWorkspace
@@ -29,7 +29,9 @@ type RuntimeContainer struct {
 }
 
 func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeContainer, error) {
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -42,20 +44,16 @@ func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeC
 	err = db.AutoMigrate(
 		&adapters.RunModel{},
 		&adapters.ThreadModel{},
-		&adapters.MessageModel{},
 		&adapters.CheckpointModel{},
 		&adapters.ActivityModel{},
-		&adapters.TaskModel{},
-		&adapters.EvidenceModel{},
 		&adapters.EventModel{},
 		&adapters.PermissionModel{},
 		&adapters.GrantModel{},
 		&adapters.LeaseModel{},
 		&adapters.CapabilityModel{},
+		&adapters.ToolSchemaSnapshotModel{},
 		&adapters.MemoryModel{},
 		&adapters.ArtifactModel{},
-		&adapters.AuditModel{},
-		&adapters.WorldStateModel{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("db migration: %w", err)
@@ -66,7 +64,6 @@ func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeC
 
 	// Wire governance
 	leaseMgr := governance.NewLocalLeaseManager(storeAdapter)
-	permCenter := governance.NewLocalPermissionCenter(leaseMgr, storeAdapter)
 
 	// Wire context engine
 	contextRegistry := contextengine.NewLocalHandleRegistry()
@@ -85,7 +82,6 @@ func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeC
 		Store:           storeAdapter,
 		EventBus:        eventBus,
 		LeaseManager:    leaseMgr,
-		PermCenter:      permCenter,
 		ContextRegistry: contextRegistry,
 		Materializer:    materializer,
 		Workspace:       workspace,

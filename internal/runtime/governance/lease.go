@@ -11,10 +11,10 @@ import (
 
 type LocalLeaseManager struct {
 	mu    sync.Mutex
-	store persistence.Bundle
+	store persistence.LeaseStore
 }
 
-func NewLocalLeaseManager(store persistence.Bundle) *LocalLeaseManager {
+func NewLocalLeaseManager(store persistence.LeaseStore) *LocalLeaseManager {
 	return &LocalLeaseManager{store: store}
 }
 

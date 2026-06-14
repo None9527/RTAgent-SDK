@@ -14,15 +14,19 @@ import (
 
 type WorldStateBuilder struct {
 	mu            sync.RWMutex
-	store         persistence.Bundle
-	cachedState   map[string]*persistence.WorldStateEntry
+	store         runtimeEventReader
+	cachedState   map[string]*domainworld.Entry
 	lastRebuiltAt map[string]time.Time
 }
 
-func NewWorldStateBuilder(store persistence.Bundle) *WorldStateBuilder {
+type runtimeEventReader interface {
+	ListRuntimeEvents(ctx context.Context, runID string) ([]persistence.RuntimeEventRecord, error)
+}
+
+func NewWorldStateBuilder(store runtimeEventReader) *WorldStateBuilder {
 	return &WorldStateBuilder{
 		store:         store,
-		cachedState:   make(map[string]*persistence.WorldStateEntry),
+		cachedState:   make(map[string]*domainworld.Entry),
 		lastRebuiltAt: make(map[string]time.Time),
 	}
 }
@@ -41,7 +45,7 @@ func (w *WorldStateBuilder) HandleEvent(ctx context.Context, ev events.Event) {
 	case events.KindTaskBlocked, events.KindTaskResumed:
 		w.invalidatePartition(ev.RunID, domainworld.PartitionTask)
 		w.updateTaskState(ctx, ev)
-	case events.KindPermissionRequested, events.KindPermissionGranted:
+	case events.KindPermissionRequested, events.KindPermissionGranted, events.KindPermissionDenied:
 		w.invalidatePartition(ev.RunID, domainworld.PartitionGovernance)
 		w.updateGovernanceState(ctx, ev)
 	}
@@ -56,7 +60,7 @@ func (w *WorldStateBuilder) RebuildAll(ctx context.Context, runID string) error 
 		return fmt.Errorf("list runtime events: %w", err)
 	}
 
-	w.cachedState = make(map[string]*persistence.WorldStateEntry)
+	w.clearRun(runID)
 
 	for _, rec := range records {
 		var payload map[string]interface{}
@@ -77,12 +81,15 @@ func (w *WorldStateBuilder) RebuildAll(ctx context.Context, runID string) error 
 	return nil
 }
 
-func (w *WorldStateBuilder) GetLatestSnapshot(ctx context.Context, runID string) ([]persistence.WorldStateEntry, error) {
+func (w *WorldStateBuilder) GetLatestSnapshot(ctx context.Context, runID string) ([]domainworld.Entry, error) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	var entries []persistence.WorldStateEntry
-	for _, entry := range w.cachedState {
+	var entries []domainworld.Entry
+	for key, entry := range w.cachedState {
+		if !runKeyMatches(key, runID) {
+			continue
+		}
 		if entry.ID != "" {
 			entries = append(entries, *entry)
 		}
@@ -92,7 +99,7 @@ func (w *WorldStateBuilder) GetLatestSnapshot(ctx context.Context, runID string)
 
 func (w *WorldStateBuilder) invalidatePartition(runID string, partition domainworld.Partition) {
 	for k, entry := range w.cachedState {
-		if entry.Partition == string(partition) {
+		if runKeyMatches(k, runID) && entry.Partition == string(partition) {
 			delete(w.cachedState, k)
 		}
 	}
@@ -101,9 +108,9 @@ func (w *WorldStateBuilder) invalidatePartition(runID string, partition domainwo
 func (w *WorldStateBuilder) updateArtifactState(ctx context.Context, ev events.Event) {
 	filePath, _ := ev.Payload["filepath"].(string)
 	artID, _ := ev.Payload["artifact_id"].(string)
-	
-	key := fmt.Sprintf("%s:%s", domainworld.PartitionArtifact, filePath)
-	w.cachedState[key] = &persistence.WorldStateEntry{
+
+	key := stateKey(ev.RunID, string(domainworld.PartitionArtifact), filePath)
+	w.cachedState[key] = &domainworld.Entry{
 		ID:         "ws_" + artID,
 		Partition:  string(domainworld.PartitionArtifact),
 		Kind:       "file",
@@ -120,9 +127,9 @@ func (w *WorldStateBuilder) updateArtifactState(ctx context.Context, ev events.E
 func (w *WorldStateBuilder) updateActivityState(ctx context.Context, ev events.Event) {
 	actID, _ := ev.Payload["activity_id"].(string)
 	kind, _ := ev.Payload["kind"].(string)
-	
-	key := fmt.Sprintf("%s:%s", domainworld.PartitionActivity, actID)
-	w.cachedState[key] = &persistence.WorldStateEntry{
+
+	key := stateKey(ev.RunID, string(domainworld.PartitionActivity), actID)
+	w.cachedState[key] = &domainworld.Entry{
 		ID:         "ws_" + actID,
 		Partition:  string(domainworld.PartitionActivity),
 		Kind:       kind,
@@ -141,8 +148,8 @@ func (w *WorldStateBuilder) updateTaskState(ctx context.Context, ev events.Event
 	objective, _ := ev.Payload["objective"].(string)
 	status, _ := ev.Payload["status"].(string)
 
-	key := fmt.Sprintf("%s:%s", domainworld.PartitionTask, taskID)
-	w.cachedState[key] = &persistence.WorldStateEntry{
+	key := stateKey(ev.RunID, string(domainworld.PartitionTask), taskID)
+	w.cachedState[key] = &domainworld.Entry{
 		ID:         "ws_" + taskID,
 		Partition:  string(domainworld.PartitionTask),
 		Kind:       "task",
@@ -161,8 +168,8 @@ func (w *WorldStateBuilder) updateGovernanceState(ctx context.Context, ev events
 	subject, _ := ev.Payload["subject"].(string)
 	granted, _ := ev.Payload["granted"].(bool)
 
-	key := fmt.Sprintf("%s:%s", domainworld.PartitionGovernance, permissionID)
-	w.cachedState[key] = &persistence.WorldStateEntry{
+	key := stateKey(ev.RunID, string(domainworld.PartitionGovernance), permissionID)
+	w.cachedState[key] = &domainworld.Entry{
 		ID:         "ws_" + permissionID,
 		Partition:  string(domainworld.PartitionGovernance),
 		Kind:       "permission",
@@ -184,7 +191,24 @@ func (w *WorldStateBuilder) replayEvent(ctx context.Context, ev events.Event) {
 		w.updateActivityState(ctx, ev)
 	case events.KindTaskBlocked, events.KindTaskResumed:
 		w.updateTaskState(ctx, ev)
-	case events.KindPermissionRequested, events.KindPermissionGranted:
+	case events.KindPermissionRequested, events.KindPermissionGranted, events.KindPermissionDenied:
 		w.updateGovernanceState(ctx, ev)
 	}
+}
+
+func (w *WorldStateBuilder) clearRun(runID string) {
+	for key := range w.cachedState {
+		if runKeyMatches(key, runID) {
+			delete(w.cachedState, key)
+		}
+	}
+}
+
+func stateKey(runID, partition, subject string) string {
+	return fmt.Sprintf("%s:%s:%s", runID, partition, subject)
+}
+
+func runKeyMatches(key, runID string) bool {
+	prefix := runID + ":"
+	return len(key) >= len(prefix) && key[:len(prefix)] == prefix
 }

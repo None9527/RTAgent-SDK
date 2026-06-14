@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-	"unsafe"
 )
 
 type EventListener func(ctx context.Context, ev Event)
@@ -17,6 +16,8 @@ type InProcessEventBus struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+	closed    bool
+	nextID    uintptr
 }
 
 func NewInProcessEventBus(bufSize int) *InProcessEventBus {
@@ -43,6 +44,12 @@ func (b *InProcessEventBus) Publish(ctx context.Context, ev Event) error {
 		ev.OccurredAt = time.Now().UTC()
 	}
 
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if b.closed {
+		return errors.New("event bus is closed")
+	}
+
 	select {
 	case b.buffer <- ev:
 		return nil
@@ -61,7 +68,8 @@ func (b *InProcessEventBus) Subscribe(kind Kind, listener EventListener) uintptr
 		b.listeners[kind] = make(map[uintptr]EventListener)
 	}
 
-	id := *(*uintptr)(unsafe.Pointer(&listener))
+	b.nextID++
+	id := b.nextID
 	b.listeners[kind][id] = listener
 	return id
 }
@@ -75,8 +83,15 @@ func (b *InProcessEventBus) Unsubscribe(kind Kind, id uintptr) {
 }
 
 func (b *InProcessEventBus) Close() {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return
+	}
+	b.closed = true
 	b.cancel()
 	close(b.buffer)
+	b.mu.Unlock()
 	b.wg.Wait()
 }
 

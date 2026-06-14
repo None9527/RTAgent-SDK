@@ -1,0 +1,1116 @@
+package rtagent // import "<module>/pkg/rtagent"
+
+Package rtagent exposes the first public SDK surface for embedding the RTAgent
+core runtime in another Go process.
+
+The SDK intentionally presents a narrow facade over the current internal
+runtime. SubmitRun drives a runnable core loop, while lower-level ports keep
+storage, governance, context materialization, model turns, tool execution,
+and read-side projections replaceable by host applications.
+
+Public compatibility for v1 is documented in docs/api/public-compatibility.md.
+Hosts should integrate through this package and Config.Host ports instead of
+depending on internal startup, persistence, or product shell packages.
+
+CONSTANTS
+
+const (
+	DefaultOpenAICompatibleBaseURL    = "https://api.openai.com/v1"
+	DefaultDashScopeCompatibleBaseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	DefaultDashScopeQwenModel         = "qwen3.7-plus"
+)
+const (
+	SchemaRuntimeEventEnvelopeV1 = "runtime_event_envelope.v1"
+	SchemaRuntimeInspectV1       = "runtime_inspect.v1"
+	SchemaSessionSnapshotV1      = "session_snapshot.v1"
+	SchemaSessionGraphV1         = "session_graph.v1"
+	SchemaCheckpointGraphV1      = "checkpoint_graph.v1"
+	SchemaPermissionSnapshotV1   = "permission_snapshot.v1"
+	SchemaWorldStateV1           = "world_state.v1"
+)
+const (
+	WorldStatePartitionMemory     = "memory"
+	WorldStatePartitionCapability = "capability"
+	WorldStatePartitionActivity   = "activity"
+	WorldStatePartitionTask       = "task"
+	WorldStatePartitionContext    = "context"
+	WorldStatePartitionGovernance = "governance"
+	WorldStatePartitionHypothesis = "hypothesis"
+	WorldStatePartitionArtifact   = "artifact"
+)
+const (
+	CapabilityStateVisible    = "visible"
+	CapabilityStateAvailable  = "available"
+	CapabilityStateAuthorized = "authorized"
+)
+const (
+	RuntimeStatusOK        = "ok"
+	RuntimeStatusQueued    = "queued"
+	RuntimeStatusRunning   = "running"
+	RuntimeStatusBlocked   = "blocked"
+	RuntimeStatusSuspended = "suspended"
+	RuntimeStatusDenied    = "denied"
+	RuntimeStatusCompleted = "completed"
+	RuntimeStatusFailed    = "failed"
+	RuntimeStatusCanceled  = "canceled"
+)
+const (
+	SessionStatusActive   = "active"
+	SessionStatusStopping = "stopping"
+	SessionStatusStopped  = "stopped"
+
+	StopSessionModeDrain        = "drain"
+	StopSessionModeCancelActive = "cancel_active"
+)
+const (
+	PermissionDefault     = "default"
+	PermissionAcceptEdits = "acceptEdits"
+	PermissionYolo        = "yolo"
+
+	PlanningOff  = "off"
+	PlanningPlan = "plan"
+)
+const (
+	PermissionStatusAllowed          = "allowed"
+	PermissionStatusDenied           = "denied"
+	PermissionStatusRequiresApproval = "requires_approval"
+
+	PermissionDecisionDeny               = "deny"
+	PermissionDecisionAllowOnce          = "allow_once"
+	PermissionDecisionAllowForRun        = "allow_for_run"
+	PermissionDecisionAllowForSession    = "allow_for_session"
+	PermissionDecisionAllowAllForRun     = "allow_all_for_run"
+	PermissionDecisionAllowAllForSession = "allow_all_for_session"
+
+	PermissionGrantScopeAction  = "action"
+	PermissionGrantScopeRun     = "run"
+	PermissionGrantScopeSession = "session"
+
+	PermissionCapabilityAny            = "*"
+	PermissionCapabilityToolCall       = "tool.call"
+	PermissionCapabilityWorkspaceWrite = "workspace.write"
+	PermissionCapabilityShellExec      = "shell.exec"
+	PermissionCapabilityMCPCall        = "mcp.call"
+	PermissionCapabilityModelApproval  = "model.approval"
+)
+const (
+	ModelStreamEventTextDelta     = "text_delta"
+	ModelStreamEventToolCallDelta = "tool_call_delta"
+)
+
+VARIABLES
+
+var ErrRuntimeClosed = errors.New("rtagent runtime is closed")
+
+FUNCTIONS
+
+func NewDashScopeOpenAICompatibleProviderFromEnv(model string) (*OpenAICompatibleProvider, error)
+func NewDashScopeQwen37PlusProviderFromEnv() (*OpenAICompatibleProvider, error)
+func NewOpenAICompatibleProvider(cfg OpenAICompatibleProviderConfig) (*OpenAICompatibleProvider, error)
+func Open(ctx context.Context, cfg Config) (*Runtime, error)
+
+TYPES
+
+type ApprovalDecisionOption struct {
+	Decision string `json:"decision"`
+	Label    string `json:"label"`
+	Scope    string `json:"scope,omitempty"`
+}
+
+type ApprovalRequest struct {
+	ID                   string                   `json:"id"`
+	Kind                 string                   `json:"kind"`
+	Reviewer             string                   `json:"reviewer,omitempty"`
+	Scope                string                   `json:"scope,omitempty"`
+	ToolTarget           string                   `json:"tool_target,omitempty"`
+	Description          string                   `json:"description,omitempty"`
+	Permission           string                   `json:"permission,omitempty"`
+	ArgumentsPreview     string                   `json:"arguments_preview,omitempty"`
+	AvailableDecisions   []ApprovalDecisionOption `json:"available_decisions,omitempty"`
+	RequestedGrants      []ScopedPermissionGrant  `json:"requested_grants,omitempty"`
+	Risk                 string                   `json:"risk,omitempty"`
+	BoundaryDecisionID   string                   `json:"boundary_decision_id,omitempty"`
+	ToolSchemaSnapshotID string                   `json:"tool_schema_snapshot_id,omitempty"`
+	ToolSchemaHash       string                   `json:"tool_schema_hash,omitempty"`
+	ToolCallID           string                   `json:"tool_call_id,omitempty"`
+	ToolEpoch            string                   `json:"tool_epoch,omitempty"`
+	RunID                string                   `json:"run_id,omitempty"`
+	SessionID            string                   `json:"session_id,omitempty"`
+	RootRunID            string                   `json:"root_run_id,omitempty"`
+	TaskID               string                   `json:"task_id,omitempty"`
+	ActorID              string                   `json:"actor_id,omitempty"`
+	OwnerID              string                   `json:"owner_id,omitempty"`
+	ScopeHash            string                   `json:"scope_hash,omitempty"`
+	IntegrityHash        string                   `json:"integrity_hash,omitempty"`
+	EvidenceRefs         []EvidenceRef            `json:"evidence_refs,omitempty"`
+}
+
+type ArtifactRecord struct {
+	ArtifactID string `json:"artifact_id,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Path       string `json:"path,omitempty"`
+	SHA256     string `json:"sha256,omitempty"`
+	ByteSize   int    `json:"byte_size,omitempty"`
+	Preview    string `json:"preview,omitempty"`
+	CreatedAt  string `json:"created_at,omitempty"`
+}
+
+type CapabilityInventoryItem struct {
+	ID             string                  `json:"id"`
+	Kind           string                  `json:"kind,omitempty"`
+	Namespace      string                  `json:"namespace,omitempty"`
+	Version        string                  `json:"version,omitempty"`
+	Summary        string                  `json:"summary,omitempty"`
+	ProviderName   string                  `json:"provider_name,omitempty"`
+	Visible        bool                    `json:"visible"`
+	Available      bool                    `json:"available"`
+	ReadOnly       bool                    `json:"read_only,omitempty"`
+	Risk           string                  `json:"risk,omitempty"`
+	Permission     string                  `json:"permission,omitempty"`
+	Boundary       string                  `json:"boundary,omitempty"`
+	SchemaHash     string                  `json:"schema_hash,omitempty"`
+	RequiredGrants []ScopedPermissionGrant `json:"required_grants,omitempty"`
+	Metadata       map[string]any          `json:"metadata,omitempty"`
+}
+
+type CapabilityState struct {
+	ID                  string                  `json:"id"`
+	Kind                string                  `json:"kind,omitempty"`
+	Namespace           string                  `json:"namespace,omitempty"`
+	Version             string                  `json:"version,omitempty"`
+	Status              string                  `json:"status,omitempty"`
+	Visible             bool                    `json:"visible"`
+	Available           bool                    `json:"available"`
+	Authorized          bool                    `json:"authorized"`
+	Source              string                  `json:"source,omitempty"`
+	SourceID            string                  `json:"source_id,omitempty"`
+	SourceSeq           int64                   `json:"source_seq,omitempty"`
+	Authority           string                  `json:"authority,omitempty"`
+	Summary             string                  `json:"summary,omitempty"`
+	Risk                string                  `json:"risk,omitempty"`
+	Boundary            string                  `json:"boundary,omitempty"`
+	Permission          string                  `json:"permission,omitempty"`
+	SchemaHash          string                  `json:"schema_hash,omitempty"`
+	ProviderName        string                  `json:"provider_name,omitempty"`
+	ReadOnly            bool                    `json:"read_only,omitempty"`
+	ConcurrencySafe     bool                    `json:"concurrency_safe,omitempty"`
+	ResourceLocks       []ResourceLock          `json:"resource_locks,omitempty"`
+	Handle              string                  `json:"handle,omitempty"`
+	AuthorizationReason string                  `json:"authorization_reason,omitempty"`
+	MatchedGrantID      string                  `json:"matched_grant_id,omitempty"`
+	MatchedGrantScope   string                  `json:"matched_grant_scope,omitempty"`
+	PolicyHash          string                  `json:"policy_hash,omitempty"`
+	RequiredGrants      []ScopedPermissionGrant `json:"required_grants,omitempty"`
+}
+
+type CheckpointEdge struct {
+	FromCheckpointID string `json:"from_checkpoint_id"`
+	ToCheckpointID   string `json:"to_checkpoint_id"`
+	Kind             string `json:"kind"`
+}
+
+type CheckpointGraphQuery struct {
+	RunID string `json:"run_id"`
+}
+
+type CheckpointGraphSnapshot struct {
+	SchemaVersion      string           `json:"schema_version"`
+	RunID              string           `json:"run_id"`
+	SessionID          string           `json:"session_id,omitempty"`
+	LatestCheckpointID string           `json:"latest_checkpoint_id,omitempty"`
+	Nodes              []CheckpointNode `json:"nodes,omitempty"`
+	Edges              []CheckpointEdge `json:"edges,omitempty"`
+	RuntimeContract    string           `json:"runtime_contract"`
+	Warnings           []string         `json:"warnings,omitempty"`
+}
+
+type CheckpointNode struct {
+	CheckpointID string         `json:"checkpoint_id"`
+	GraphID      string         `json:"graph_id,omitempty"`
+	Node         string         `json:"node"`
+	Route        string         `json:"route,omitempty"`
+	NextNode     string         `json:"next_node,omitempty"`
+	Status       string         `json:"status,omitempty"`
+	Source       string         `json:"source,omitempty"`
+	CreatedAt    string         `json:"created_at,omitempty"`
+	ResumeReady  bool           `json:"resume_ready,omitempty"`
+	Summary      string         `json:"summary,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
+type Config struct {
+	Runtime RuntimeConfig
+	Host    HostPorts
+}
+
+type ContextHandle struct {
+	HandleID              string   `json:"handle_id"`
+	RunID                 string   `json:"run_id"`
+	Kind                  string   `json:"kind"`
+	Title                 string   `json:"title"`
+	Summary               string   `json:"summary"`
+	SourceRef             string   `json:"source_ref"`
+	TokenEstimate         int      `json:"token_estimate"`
+	Freshness             float64  `json:"freshness"`
+	MaterializationPolicy string   `json:"materialization_policy"`
+	EvidenceRefs          []string `json:"evidence_refs,omitempty"`
+}
+
+type ContextPacket struct {
+	ID                   string                 `json:"id"`
+	RunID                string                 `json:"run_id"`
+	SessionID            string                 `json:"session_id,omitempty"`
+	Scope                ExecutionScope         `json:"scope"`
+	Input                string                 `json:"input,omitempty"`
+	Payload              map[string]any         `json:"payload,omitempty"`
+	Events               []RuntimeEventEnvelope `json:"events,omitempty"`
+	ToolSpecs            []ToolSpec             `json:"tool_specs,omitempty"`
+	ToolSchemaSnapshotID string                 `json:"tool_schema_snapshot_id,omitempty"`
+	ToolSchemaHash       string                 `json:"tool_schema_hash,omitempty"`
+	GeneratedAt          time.Time              `json:"generated_at,omitempty"`
+}
+
+type EventKind string
+
+const (
+	EventKindRunCreated          EventKind = "run.created"
+	EventKindAgentStarted        EventKind = "agent.started"
+	EventKindAgentPlanProposed   EventKind = "agent.plan.proposed"
+	EventKindPermissionRequested EventKind = "permission.requested"
+	EventKindPermissionGranted   EventKind = "permission.granted"
+	EventKindPermissionDenied    EventKind = "permission.denied"
+	EventKindToolInvoked         EventKind = "tool.invoked"
+	EventKindToolSucceeded       EventKind = "tool.succeeded"
+	EventKindToolFailed          EventKind = "tool.failed"
+	EventKindActivityStarted     EventKind = "activity.started"
+	EventKindActivityCompleted   EventKind = "activity.completed"
+
+	EventKindSessionStarted EventKind = "session.started"
+	EventKindSessionEnded   EventKind = "session.ended"
+	EventKindTurnStarted    EventKind = "turn.started"
+	EventKindTurnCompleted  EventKind = "turn.completed"
+	EventKindTurnFailed     EventKind = "turn.failed"
+	EventKindTurnCancelled  EventKind = "turn.cancelled"
+	EventKindRunInterrupted EventKind = "run.interrupted"
+	EventKindRunHeartbeat   EventKind = "run.heartbeat"
+
+	EventKindContextPacketCreated EventKind = "context.packet.created"
+	EventKindModelRequested       EventKind = "model.requested"
+	EventKindModelResponded       EventKind = "model.responded"
+	EventKindModelDelta           EventKind = "model.delta"
+	EventKindCheckpointCreated    EventKind = "checkpoint.created"
+)
+type EventQuery struct {
+	RunID     string `json:"run_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	AfterSeq  int64  `json:"after_seq,omitempty"`
+}
+
+type EvidenceRef struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind,omitempty"`
+	Summary string `json:"summary,omitempty"`
+}
+
+type ExecutionConstraints struct {
+	ProfileID string   `json:"profile_id,omitempty"`
+	FileScope []string `json:"file_scope,omitempty"`
+	Network   string   `json:"network,omitempty"`
+}
+
+type ExecutionScope struct {
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
+	TurnID      string `json:"turn_id,omitempty"`
+	RunID       string `json:"run_id,omitempty"`
+	RootRunID   string `json:"root_run_id,omitempty"`
+	ParentRunID string `json:"parent_run_id,omitempty"`
+	TaskID      string `json:"task_id,omitempty"`
+	ActorID     string `json:"actor_id,omitempty"`
+	OwnerID     string `json:"owner_id,omitempty"`
+	ActorKind   string `json:"actor_kind,omitempty"`
+
+	PermissionMode string `json:"permission_mode,omitempty"`
+	PlanningState  string `json:"planning_state,omitempty"`
+	TraceID        string `json:"trace_id,omitempty"`
+}
+
+type HostPorts struct {
+	Model      ModelProvider
+	Tools      []ToolProvider
+	Memory     MemoryProvider
+	Hypothesis HypothesisProvider
+	MCP        MCPProvider
+	Skill      SkillProvider
+	WorldState []WorldStateProvider
+}
+
+type HypothesisFact struct {
+	ID           string         `json:"id,omitempty"`
+	Kind         string         `json:"kind,omitempty"`
+	Subject      string         `json:"subject,omitempty"`
+	Predicate    string         `json:"predicate,omitempty"`
+	Summary      string         `json:"summary,omitempty"`
+	Source       string         `json:"source,omitempty"`
+	SourceID     string         `json:"source_id,omitempty"`
+	ObservedAt   string         `json:"observed_at,omitempty"`
+	Confidence   float64        `json:"confidence,omitempty"`
+	EvidenceRefs []string       `json:"evidence_refs,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
+type HypothesisProvider interface {
+	Hypotheses(ctx context.Context, scope ExecutionScope) ([]HypothesisFact, error)
+}
+
+type HypothesisProviderFunc func(context.Context, ExecutionScope) ([]HypothesisFact, error)
+    HypothesisProviderFunc adapts a function to HypothesisProvider.
+
+func (fn HypothesisProviderFunc) Hypotheses(ctx context.Context, scope ExecutionScope) ([]HypothesisFact, error)
+
+type Identity struct {
+	ActorID string `json:"actor_id,omitempty"`
+	OwnerID string `json:"owner_id,omitempty"`
+	Admin   bool   `json:"admin,omitempty"`
+}
+
+type InspectQuery struct {
+	RunID     string `json:"run_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	AfterSeq  int64  `json:"after_seq,omitempty"`
+}
+
+type InterruptRunResult struct {
+	SchemaVersion   string `json:"schema_version"`
+	Status          string `json:"status"`
+	RunID           string `json:"run_id"`
+	SessionID       string `json:"session_id,omitempty"`
+	CancellationBy  string `json:"cancellation_by"`
+	RuntimeContract string `json:"runtime_contract"`
+}
+
+type MCPProvider interface {
+	MCPInventory(ctx context.Context, scope ExecutionScope) ([]CapabilityInventoryItem, error)
+}
+
+type MCPProviderFunc func(context.Context, ExecutionScope) ([]CapabilityInventoryItem, error)
+    MCPProviderFunc adapts a function to MCPProvider.
+
+func (fn MCPProviderFunc) MCPInventory(ctx context.Context, scope ExecutionScope) ([]CapabilityInventoryItem, error)
+
+type MemoryFact struct {
+	ID           string         `json:"id,omitempty"`
+	Kind         string         `json:"kind,omitempty"`
+	Subject      string         `json:"subject,omitempty"`
+	State        string         `json:"state,omitempty"`
+	Summary      string         `json:"summary,omitempty"`
+	Content      string         `json:"content,omitempty"`
+	Source       string         `json:"source,omitempty"`
+	SourceID     string         `json:"source_id,omitempty"`
+	ObservedAt   string         `json:"observed_at,omitempty"`
+	Confidence   float64        `json:"confidence,omitempty"`
+	EvidenceRefs []string       `json:"evidence_refs,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
+type MemoryProvider interface {
+	MemoryFacts(ctx context.Context, scope ExecutionScope) ([]MemoryFact, error)
+}
+
+type MemoryProviderFunc func(context.Context, ExecutionScope) ([]MemoryFact, error)
+    MemoryProviderFunc adapts a function to MemoryProvider.
+
+func (fn MemoryProviderFunc) MemoryFacts(ctx context.Context, scope ExecutionScope) ([]MemoryFact, error)
+
+type ModelMessage struct {
+	Role       string         `json:"role"`
+	Content    string         `json:"content,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
+	Name       string         `json:"name,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+}
+
+type ModelProvider interface {
+	CompleteTurn(ctx context.Context, req ModelRequest, stream ModelStreamHandler) (ModelResponse, error)
+}
+
+type ModelProviderError interface {
+	error
+	ModelProviderErrorDetails() ModelProviderErrorDetails
+}
+
+type ModelProviderErrorDetails struct {
+	Provider     string `json:"provider,omitempty"`
+	StatusCode   int    `json:"status_code,omitempty"`
+	Code         string `json:"code,omitempty"`
+	Message      string `json:"message,omitempty"`
+	Retryable    bool   `json:"retryable,omitempty"`
+	RateLimited  bool   `json:"rate_limited,omitempty"`
+	SafeForModel bool   `json:"safe_for_model,omitempty"`
+	BodyPreview  string `json:"body_preview,omitempty"`
+}
+
+type ModelProviderFunc func(context.Context, ModelRequest, ModelStreamHandler) (ModelResponse, error)
+    ModelProviderFunc adapts a function to ModelProvider.
+
+func (fn ModelProviderFunc) CompleteTurn(ctx context.Context, req ModelRequest, stream ModelStreamHandler) (ModelResponse, error)
+
+type ModelRequest struct {
+	Scope        ExecutionScope         `json:"scope"`
+	Input        string                 `json:"input,omitempty"`
+	Context      ContextPacket          `json:"context"`
+	Messages     []ModelMessage         `json:"messages,omitempty"`
+	ToolSpecs    []ToolSpec             `json:"tool_specs,omitempty"`
+	Observations []ToolObservation      `json:"observations,omitempty"`
+	Iteration    int                    `json:"iteration"`
+	Metadata     map[string]any         `json:"metadata,omitempty"`
+	Events       []RuntimeEventEnvelope `json:"events,omitempty"`
+}
+
+type ModelResponse struct {
+	Output          string           `json:"output,omitempty"`
+	ToolCalls       []ToolCall       `json:"tool_calls,omitempty"`
+	ApprovalRequest *ApprovalRequest `json:"approval_request,omitempty"`
+	PlanArtifact    *PlanArtifact    `json:"plan_artifact,omitempty"`
+	Metadata        map[string]any   `json:"metadata,omitempty"`
+	StopReason      string           `json:"stop_reason,omitempty"`
+	Usage           *ModelUsage      `json:"usage,omitempty"`
+}
+
+type ModelStreamEvent struct {
+	Type           string         `json:"type"`
+	Text           string         `json:"text,omitempty"`
+	ToolCallIndex  int            `json:"tool_call_index,omitempty"`
+	ToolCallID     string         `json:"tool_call_id,omitempty"`
+	ToolName       string         `json:"tool_name,omitempty"`
+	ArgumentsDelta string         `json:"arguments_delta,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
+type ModelStreamHandler func(ModelStreamEvent) error
+
+type ModelUsage struct {
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
+}
+
+type OpenAICompatibleProvider struct {
+	// Has unexported fields.
+}
+
+func (p *OpenAICompatibleProvider) CompleteTurn(ctx context.Context, req ModelRequest, stream ModelStreamHandler) (ModelResponse, error)
+
+type OpenAICompatibleProviderConfig struct {
+	BaseURL      string
+	APIKey       string
+	Model        string
+	SystemPrompt string
+	HTTPClient   *http.Client
+	Timeout      time.Duration
+	Headers      map[string]string
+	ExtraBody    map[string]any
+}
+
+type PermissionCenter interface {
+	CheckPermission(ctx context.Context, req PermissionCheckRequest) (PermissionCheckResult, error)
+	ResolvePermission(ctx context.Context, req PermissionDecisionRequest) (PermissionDecisionResult, error)
+}
+
+type PermissionCheckRequest struct {
+	Scope                ExecutionScope `json:"scope"`
+	Action               ProposedAction `json:"action"`
+	ToolCall             *ToolCall      `json:"tool_call,omitempty"`
+	ToolSpec             *ToolSpec      `json:"tool_spec,omitempty"`
+	ToolSchemaSnapshotID string         `json:"tool_schema_snapshot_id,omitempty"`
+	ActivityID           string         `json:"activity_id,omitempty"`
+	Reason               string         `json:"reason,omitempty"`
+}
+
+type PermissionCheckResult struct {
+	Status          string                 `json:"status"`
+	Decision        string                 `json:"decision,omitempty"`
+	PermissionID    string                 `json:"permission_id,omitempty"`
+	ApprovalRequest *ApprovalRequest       `json:"approval_request,omitempty"`
+	Grant           *ScopedPermissionGrant `json:"grant,omitempty"`
+	Reason          string                 `json:"reason,omitempty"`
+}
+
+type PermissionDecisionRecord struct {
+	ID            string `json:"id,omitempty"`
+	Kind          string `json:"kind,omitempty"`
+	Capability    string `json:"capability,omitempty"`
+	ToolTarget    string `json:"tool_target,omitempty"`
+	Resource      string `json:"resource,omitempty"`
+	Decision      string `json:"decision,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	Risk          string `json:"risk,omitempty"`
+	SourceEventID string `json:"source_event_id,omitempty"`
+	SourceSeq     int64  `json:"source_seq,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
+}
+
+type PermissionDecisionRequest struct {
+	ApprovalID string         `json:"approval_id"`
+	Decision   string         `json:"decision"`
+	Scope      ExecutionScope `json:"scope,omitempty"`
+	ActorID    string         `json:"actor_id,omitempty"`
+	Reason     string         `json:"reason,omitempty"`
+}
+
+type PermissionDecisionResult struct {
+	Status       string                 `json:"status"`
+	PermissionID string                 `json:"permission_id,omitempty"`
+	Grant        *ScopedPermissionGrant `json:"grant,omitempty"`
+	Reason       string                 `json:"reason,omitempty"`
+}
+
+type PermissionRequiredError struct {
+	ApprovalRequest *ApprovalRequest `json:"approval_request,omitempty"`
+	Message         string           `json:"message,omitempty"`
+}
+
+func (e *PermissionRequiredError) Error() string
+
+type PermissionSnapshot struct {
+	SchemaVersion    string                     `json:"schema_version"`
+	SessionID        string                     `json:"session_id,omitempty"`
+	RunID            string                     `json:"run_id,omitempty"`
+	Mode             string                     `json:"mode,omitempty"`
+	PolicyHash       string                     `json:"policy_hash,omitempty"`
+	SourceSeq        int64                      `json:"source_seq,omitempty"`
+	ActiveGrants     []ScopedPermissionGrant    `json:"active_grants,omitempty"`
+	PendingDecisions []ApprovalRequest          `json:"pending_decisions,omitempty"`
+	DeniedDecisions  []PermissionDecisionRecord `json:"denied_decisions,omitempty"`
+	ResourceRules    []ResourceRuleSnapshot     `json:"resource_rules,omitempty"`
+	Warnings         []string                   `json:"warnings,omitempty"`
+}
+
+type PermissionSnapshotQuery struct {
+	RunID string `json:"run_id"`
+}
+
+type PlanArtifact struct {
+	ID               string              `json:"id"`
+	RunID            string              `json:"run_id"`
+	SessionID        string              `json:"session_id,omitempty"`
+	Revision         int                 `json:"revision"`
+	State            string              `json:"state"`
+	Goal             string              `json:"goal,omitempty"`
+	Content          string              `json:"content,omitempty"`
+	Constraints      []string            `json:"constraints,omitempty"`
+	Invariants       []string            `json:"invariants,omitempty"`
+	Decisions        []string            `json:"decisions,omitempty"`
+	VerificationPlan []string            `json:"verification_plan,omitempty"`
+	Dialogue         []PlanDialogueEntry `json:"dialogue,omitempty"`
+	UserFeedback     string              `json:"user_feedback,omitempty"`
+	Source           string              `json:"source,omitempty"`
+	CreatedAt        time.Time           `json:"created_at,omitempty"`
+	UpdatedAt        time.Time           `json:"updated_at,omitempty"`
+}
+
+type PlanDialogueEntry struct {
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+}
+
+type ProposedAction struct {
+	ActionID string         `json:"action_id"`
+	Kind     string         `json:"kind"`
+	Target   string         `json:"target"`
+	Args     map[string]any `json:"args"`
+}
+
+type ResourceLock struct {
+	Kind string `json:"kind"`
+	Key  string `json:"key,omitempty"`
+	Mode string `json:"mode"`
+}
+
+type ResourceRuleSnapshot struct {
+	Kind     string `json:"kind"`
+	Resource string `json:"resource,omitempty"`
+	Decision string `json:"decision,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Source   string `json:"source,omitempty"`
+}
+
+type ResumeRunRequest struct {
+	RunID        string         `json:"run_id,omitempty"`
+	CheckpointID string         `json:"checkpoint_id,omitempty"`
+	ApprovalID   string         `json:"approval_id,omitempty"`
+	Decision     string         `json:"decision,omitempty"`
+	Scope        ExecutionScope `json:"scope,omitempty"`
+}
+
+type Runtime struct {
+	// Has unexported fields.
+}
+
+func (r *Runtime) CheckPermission(ctx context.Context, req PermissionCheckRequest) (PermissionCheckResult, error)
+
+func (r *Runtime) CheckpointGraph(ctx context.Context, query CheckpointGraphQuery) (CheckpointGraphSnapshot, error)
+
+func (r *Runtime) Close() error
+
+func (r *Runtime) Emit(ctx context.Context, draft RuntimeEventDraft) (RuntimeEventEnvelope, error)
+
+func (r *Runtime) EvaluateProposal(ctx context.Context, agentID string, action ProposedAction, activeActivityID string) error
+
+func (r *Runtime) Inspect(ctx context.Context, query InspectQuery) (RuntimeInspectSnapshot, error)
+
+func (r *Runtime) InspectSession(ctx context.Context, query SessionQuery) (SessionSnapshot, error)
+
+func (r *Runtime) InterruptRun(ctx context.Context, runID string) (InterruptRunResult, error)
+
+func (r *Runtime) ListEvents(ctx context.Context, query EventQuery) ([]RuntimeEventEnvelope, error)
+
+func (r *Runtime) MaterializeContext(ctx context.Context, handleID string) (string, error)
+
+func (r *Runtime) PermissionSnapshot(ctx context.Context, query PermissionSnapshotQuery) (PermissionSnapshot, error)
+
+func (r *Runtime) RegisterContextHandle(ctx context.Context, handle ContextHandle) error
+
+func (r *Runtime) ResolveApproval(ctx context.Context, approvalID, decision string) (RuntimeStateProjection, error)
+
+func (r *Runtime) ResolvePermission(ctx context.Context, req PermissionDecisionRequest) (PermissionDecisionResult, error)
+
+func (r *Runtime) ResumeRun(ctx context.Context, req ResumeRunRequest) (RuntimeStateProjection, error)
+
+func (r *Runtime) Run(ctx context.Context, cmd RuntimeCommand) (RuntimeStateProjection, error)
+
+func (r *Runtime) SessionGraph(ctx context.Context, query SessionGraphQuery) (SessionGraphSnapshot, error)
+
+func (r *Runtime) StopSession(ctx context.Context, req StopSessionRequest) (StopSessionResult, error)
+
+func (r *Runtime) SubmitRun(ctx context.Context, req SubmitRunRequest, ident Identity) (RuntimeStateProjection, error)
+
+func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldStateSnapshot, error)
+
+func (r *Runtime) WriteFile(ctx context.Context, req WriteFileRequest) (ArtifactRecord, error)
+
+type RuntimeCommand struct {
+	ID             string         `json:"id,omitempty"`
+	Kind           string         `json:"kind,omitempty"`
+	Scope          ExecutionScope `json:"scope,omitempty"`
+	Payload        map[string]any `json:"payload,omitempty"`
+	IdempotencyKey string         `json:"idempotency_key,omitempty"`
+	RequestedBy    string         `json:"requested_by,omitempty"`
+	CreatedAt      time.Time      `json:"created_at,omitempty"`
+}
+
+type RuntimeConfig struct {
+	DSN               string
+	WorkDir           string
+	MaxToolIterations int
+	RunLeaseTTL       time.Duration
+}
+
+type RuntimeError struct {
+	Code         string `json:"code"`
+	Message      string `json:"message"`
+	Provider     string `json:"provider,omitempty"`
+	StatusCode   int    `json:"status_code,omitempty"`
+	ProviderCode string `json:"provider_code,omitempty"`
+	Retryable    bool   `json:"retryable,omitempty"`
+	RateLimited  bool   `json:"rate_limited,omitempty"`
+	SafeForModel bool   `json:"safe_for_model,omitempty"`
+	BodyPreview  string `json:"body_preview,omitempty"`
+}
+
+func (e *RuntimeError) Error() string
+
+type RuntimeEventDraft struct {
+	EventID    string         `json:"event_id,omitempty"`
+	RunID      string         `json:"run_id"`
+	Kind       EventKind      `json:"kind"`
+	Sequence   int64          `json:"sequence,omitempty"`
+	OccurredAt time.Time      `json:"occurred_at,omitempty"`
+	Message    string         `json:"message,omitempty"`
+	Payload    map[string]any `json:"payload,omitempty"`
+}
+
+type RuntimeEventEnvelope struct {
+	SchemaVersion string         `json:"schema_version"`
+	EventID       string         `json:"event_id"`
+	RunID         string         `json:"run_id"`
+	Kind          EventKind      `json:"kind"`
+	Sequence      int64          `json:"sequence"`
+	OccurredAt    string         `json:"occurred_at,omitempty"`
+	Message       string         `json:"message,omitempty"`
+	Payload       map[string]any `json:"payload,omitempty"`
+}
+
+type RuntimeInspectSnapshot struct {
+	SchemaVersion   string                 `json:"schema_version"`
+	SessionID       string                 `json:"session_id,omitempty"`
+	RunID           string                 `json:"run_id,omitempty"`
+	Status          string                 `json:"status"`
+	Resolution      string                 `json:"resolution,omitempty"`
+	Active          bool                   `json:"active"`
+	Blocked         bool                   `json:"blocked,omitempty"`
+	LastSeq         int64                  `json:"last_seq"`
+	EventsAfterSeq  []RuntimeEventEnvelope `json:"events_after_seq,omitempty"`
+	Events          []RuntimeEventEnvelope `json:"events,omitempty"`
+	PermissionMode  string                 `json:"permission_mode,omitempty"`
+	PlanningState   string                 `json:"planning_state,omitempty"`
+	Profile         string                 `json:"profile,omitempty"`
+	Workspace       string                 `json:"workspace,omitempty"`
+	ActorID         string                 `json:"actor_id,omitempty"`
+	OwnerID         string                 `json:"owner_id,omitempty"`
+	WorldState      *WorldStateSnapshot    `json:"world_state,omitempty"`
+	Permission      *PermissionSnapshot    `json:"permission,omitempty"`
+	Warnings        []string               `json:"warnings,omitempty"`
+	RuntimeContract string                 `json:"runtime_contract,omitempty"`
+}
+
+type RuntimeStateProjection struct {
+	RunID           string           `json:"run_id"`
+	SessionID       string           `json:"session_id,omitempty"`
+	Status          string           `json:"status"`
+	Resolution      string           `json:"resolution,omitempty"`
+	LastCheckpoint  string           `json:"last_checkpoint,omitempty"`
+	PermissionMode  string           `json:"permission_mode,omitempty"`
+	PlanningState   string           `json:"planning_state,omitempty"`
+	Output          string           `json:"output,omitempty"`
+	ApprovalRequest *ApprovalRequest `json:"approval_request,omitempty"`
+	PlanArtifact    *PlanArtifact    `json:"plan_artifact,omitempty"`
+	Problem         *RuntimeError    `json:"problem,omitempty"`
+}
+
+type ScopedPermissionGrant struct {
+	ID         string `json:"id,omitempty"`
+	Capability string `json:"capability"`
+	ToolTarget string `json:"tool_target,omitempty"`
+	Resource   string `json:"resource,omitempty"`
+	Scope      string `json:"scope"`
+	ActionID   string `json:"action_id,omitempty"`
+	RunID      string `json:"run_id,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+	RootRunID  string `json:"root_run_id,omitempty"`
+	TaskID     string `json:"task_id,omitempty"`
+	ActorID    string `json:"actor_id,omitempty"`
+	OwnerID    string `json:"owner_id,omitempty"`
+	Decision   string `json:"decision,omitempty"`
+	ApprovalID string `json:"approval_id,omitempty"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
+}
+
+type SessionGraphQuery struct {
+	SessionID string `json:"session_id"`
+	RootRunID string `json:"root_run_id,omitempty"`
+}
+
+type SessionGraphSnapshot struct {
+	SchemaVersion   string           `json:"schema_version"`
+	SessionID       string           `json:"session_id"`
+	Status          string           `json:"status"`
+	LatestRunID     string           `json:"latest_run_id,omitempty"`
+	RootRunID       string           `json:"root_run_id,omitempty"`
+	Nodes           []SessionRunNode `json:"nodes,omitempty"`
+	Edges           []SessionRunEdge `json:"edges,omitempty"`
+	ActiveRunIDs    []string         `json:"active_run_ids,omitempty"`
+	RuntimeContract string           `json:"runtime_contract"`
+}
+
+type SessionQuery struct {
+	SessionID string `json:"session_id"`
+}
+
+type SessionRunEdge struct {
+	FromRunID string `json:"from_run_id"`
+	ToRunID   string `json:"to_run_id"`
+	Kind      string `json:"kind"`
+}
+
+type SessionRunNode struct {
+	RunID          string `json:"run_id"`
+	SessionID      string `json:"session_id,omitempty"`
+	RootRunID      string `json:"root_run_id,omitempty"`
+	ParentRunID    string `json:"parent_run_id,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	Status         string `json:"status"`
+	Resolution     string `json:"resolution,omitempty"`
+	CreatedAt      string `json:"created_at,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
+	CompletedAt    string `json:"completed_at,omitempty"`
+	LastCheckpoint string `json:"last_checkpoint,omitempty"`
+}
+
+type SessionRunSummary struct {
+	RunID          string `json:"run_id"`
+	SessionID      string `json:"session_id,omitempty"`
+	RootRunID      string `json:"root_run_id,omitempty"`
+	ParentRunID    string `json:"parent_run_id,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	Status         string `json:"status"`
+	Resolution     string `json:"resolution,omitempty"`
+	Title          string `json:"title,omitempty"`
+	Objective      string `json:"objective,omitempty"`
+	IngressKind    string `json:"ingress_kind,omitempty"`
+	CreatedAt      string `json:"created_at,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
+	CompletedAt    string `json:"completed_at,omitempty"`
+	LastCheckpoint string `json:"last_checkpoint,omitempty"`
+}
+
+type SessionSnapshot struct {
+	SchemaVersion       string              `json:"schema_version"`
+	SessionID           string              `json:"session_id"`
+	Status              string              `json:"status"`
+	Active              bool                `json:"active"`
+	CanResume           bool                `json:"can_resume"`
+	LatestRunID         string              `json:"latest_run_id,omitempty"`
+	LatestCheckpointID  string              `json:"latest_checkpoint_id,omitempty"`
+	LatestMessageAt     string              `json:"latest_message_at,omitempty"`
+	CreatedAt           string              `json:"created_at,omitempty"`
+	UpdatedAt           string              `json:"updated_at,omitempty"`
+	RunCount            int                 `json:"run_count"`
+	ActiveRunIDs        []string            `json:"active_run_ids,omitempty"`
+	Runs                []SessionRunSummary `json:"runs,omitempty"`
+	RuntimeContract     string              `json:"runtime_contract"`
+	ResumeCommandHint   string              `json:"resume_command_hint,omitempty"`
+	ExternalResumeReady bool                `json:"external_resume_ready"`
+	Warnings            []string            `json:"warnings,omitempty"`
+}
+
+type SkillProvider interface {
+	SkillInventory(ctx context.Context, scope ExecutionScope) ([]CapabilityInventoryItem, error)
+}
+
+type SkillProviderFunc func(context.Context, ExecutionScope) ([]CapabilityInventoryItem, error)
+    SkillProviderFunc adapts a function to SkillProvider.
+
+func (fn SkillProviderFunc) SkillInventory(ctx context.Context, scope ExecutionScope) ([]CapabilityInventoryItem, error)
+
+type StopSessionRequest struct {
+	SessionID   string `json:"session_id"`
+	Mode        string `json:"mode,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	RequestedBy string `json:"requested_by,omitempty"`
+}
+
+type StopSessionResult struct {
+	SchemaVersion     string   `json:"schema_version"`
+	SessionID         string   `json:"session_id"`
+	Status            string   `json:"status"`
+	Mode              string   `json:"mode"`
+	AlreadyStopped    bool     `json:"already_stopped,omitempty"`
+	InterruptedRunIDs []string `json:"interrupted_run_ids,omitempty"`
+	RuntimeContract   string   `json:"runtime_contract"`
+}
+
+type SubmitRunRequest struct {
+	Kind                  string         `json:"kind,omitempty"`
+	RunID                 string         `json:"run_id,omitempty"`
+	SessionID             string         `json:"session_id,omitempty"`
+	SessionAlias          string         `json:"session_alias,omitempty"`
+	WorkingDir            string         `json:"working_dir,omitempty"`
+	Target                string         `json:"target,omitempty"`
+	Mode                  string         `json:"mode,omitempty"`
+	PlanningState         string         `json:"planning_state,omitempty"`
+	PrePlanPermissionMode string         `json:"pre_plan_permission_mode,omitempty"`
+	Profile               string         `json:"profile,omitempty"`
+	RootRunID             string         `json:"root_run_id,omitempty"`
+	ParentRunID           string         `json:"parent_run_id,omitempty"`
+	TaskID                string         `json:"task_id,omitempty"`
+	Role                  string         `json:"role,omitempty"`
+	Scope                 map[string]any `json:"scope,omitempty"`
+	Input                 string         `json:"input,omitempty"`
+	Args                  map[string]any `json:"args,omitempty"`
+}
+
+type ToolCall struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Arguments   map[string]any `json:"arguments,omitempty"`
+	ReadOnly    bool           `json:"read_only,omitempty"`
+	SchemaHash  string         `json:"schema_hash,omitempty"`
+	Epoch       string         `json:"epoch,omitempty"`
+	EpochClosed bool           `json:"epoch_closed,omitempty"`
+}
+
+type ToolObservation struct {
+	ToolCallID          string        `json:"tool_call_id"`
+	Name                string        `json:"name"`
+	Status              string        `json:"status"`
+	ModelVisibleSummary string        `json:"model_visible_summary"`
+	UserVisibleSummary  string        `json:"user_visible_summary,omitempty"`
+	OutputRef           string        `json:"output_ref,omitempty"`
+	EvidenceRefs        []EvidenceRef `json:"evidence_refs,omitempty"`
+}
+
+type ToolOutputPolicy struct {
+	MaxModelBytes int    `json:"max_model_bytes,omitempty"`
+	MaxUserBytes  int    `json:"max_user_bytes,omitempty"`
+	Spill         bool   `json:"spill,omitempty"`
+	SummaryMode   string `json:"summary_mode,omitempty"`
+}
+
+type ToolProvider interface {
+	ToolSpecs(ctx context.Context, scope ExecutionScope) ([]ToolSpec, error)
+	ExecuteTool(ctx context.Context, scope ExecutionScope, call ToolCall) (ToolObservation, error)
+}
+
+type ToolProviderAdapter struct {
+	Specs   func(context.Context, ExecutionScope) ([]ToolSpec, error)
+	Execute func(context.Context, ExecutionScope, ToolCall) (ToolObservation, error)
+}
+    ToolProviderAdapter adapts host functions to ToolProvider.
+
+func (p ToolProviderAdapter) ExecuteTool(ctx context.Context, scope ExecutionScope, call ToolCall) (ToolObservation, error)
+
+func (p ToolProviderAdapter) ToolSpecs(ctx context.Context, scope ExecutionScope) ([]ToolSpec, error)
+
+type ToolRegistry struct {
+	// Has unexported fields.
+}
+
+func NewToolRegistry(providers ...ToolProvider) *ToolRegistry
+
+func (r *ToolRegistry) ExecuteTool(ctx context.Context, scope ExecutionScope, call ToolCall) (ToolObservation, error)
+
+func (r *ToolRegistry) Register(provider ToolProvider) error
+
+func (r *ToolRegistry) ToolSpecs(ctx context.Context, scope ExecutionScope) ([]ToolSpec, error)
+
+type ToolSpec struct {
+	Name                 string                  `json:"name"`
+	Description          string                  `json:"description,omitempty"`
+	Parameters           map[string]any          `json:"parameters,omitempty"`
+	FreeformGrammar      string                  `json:"freeform_grammar,omitempty"`
+	Strict               bool                    `json:"strict,omitempty"`
+	Examples             []map[string]any        `json:"examples,omitempty"`
+	Namespace            string                  `json:"namespace,omitempty"`
+	ProviderName         string                  `json:"provider_name,omitempty"`
+	Deferred             bool                    `json:"deferred,omitempty"`
+	AlwaysVisible        bool                    `json:"always_visible,omitempty"`
+	SearchHint           string                  `json:"search_hint,omitempty"`
+	ReadOnly             bool                    `json:"read_only,omitempty"`
+	SideEffectKind       string                  `json:"side_effect_kind,omitempty"`
+	RiskLevel            string                  `json:"risk_level,omitempty"`
+	ConcurrencySafe      bool                    `json:"concurrency_safe,omitempty"`
+	InterruptBehavior    string                  `json:"interrupt_behavior,omitempty"`
+	ResourceLocks        []ResourceLock          `json:"resource_locks,omitempty"`
+	OutputPolicy         ToolOutputPolicy        `json:"output_policy,omitempty"`
+	OutputSchema         map[string]any          `json:"output_schema,omitempty"`
+	ExecutionConstraints ExecutionConstraints    `json:"execution_constraints,omitempty"`
+	RequiredGrants       []ScopedPermissionGrant `json:"required_grants,omitempty"`
+	Version              string                  `json:"version,omitempty"`
+	Epoch                string                  `json:"epoch,omitempty"`
+	SchemaHash           string                  `json:"schema_hash,omitempty"`
+}
+
+type WorldStateEntry struct {
+	ID               string           `json:"id,omitempty"`
+	Partition        string           `json:"partition,omitempty"`
+	Kind             string           `json:"kind,omitempty"`
+	Subject          string           `json:"subject,omitempty"`
+	StateOrPredicate string           `json:"state_or_predicate,omitempty"`
+	StateJSON        string           `json:"state_json,omitempty"`
+	Summary          string           `json:"summary,omitempty"`
+	Source           string           `json:"source,omitempty"`
+	SourceID         string           `json:"source_id,omitempty"`
+	SourceSeq        int64            `json:"source_seq,omitempty"`
+	Authority        string           `json:"authority,omitempty"`
+	Confidence       float64          `json:"confidence,omitempty"`
+	ObservedAt       string           `json:"observed_at,omitempty"`
+	EvidenceRefs     []string         `json:"evidence_refs,omitempty"`
+	ExpiresAt        string           `json:"expires_at,omitempty"`
+	Version          int64            `json:"version,omitempty"`
+	Capability       *CapabilityState `json:"capability,omitempty"`
+	Metadata         map[string]any   `json:"metadata,omitempty"`
+}
+
+type WorldStateHandle struct {
+	Handle              string `json:"handle"`
+	Kind                string `json:"kind,omitempty"`
+	Partition           string `json:"partition,omitempty"`
+	Summary             string `json:"summary,omitempty"`
+	Source              string `json:"source,omitempty"`
+	SourceID            string `json:"source_id,omitempty"`
+	SourceSeq           int64  `json:"source_seq,omitempty"`
+	SnapshotID          string `json:"snapshot_id,omitempty"`
+	ContentHash         string `json:"content_hash,omitempty"`
+	ValidWithinSnapshot bool   `json:"valid_within_snapshot"`
+	ValidUntilSourceSeq int64  `json:"valid_until_source_seq,omitempty"`
+	Reloadable          bool   `json:"reloadable"`
+	RequiresPermission  bool   `json:"requires_permission"`
+	Permission          string `json:"permission,omitempty"`
+	RedactionLevel      string `json:"redaction_level,omitempty"`
+	ExpiresAt           string `json:"expires_at,omitempty"`
+}
+
+type WorldStatePartition struct {
+	SchemaVersion   string             `json:"schema_version,omitempty"`
+	SnapshotID      string             `json:"snapshot_id,omitempty"`
+	Partition       string             `json:"partition"`
+	Provider        string             `json:"provider,omitempty"`
+	Source          string             `json:"source,omitempty"`
+	SourceSeq       int64              `json:"source_seq,omitempty"`
+	SourceWatermark string             `json:"source_watermark,omitempty"`
+	BuiltAt         string             `json:"built_at,omitempty"`
+	Entries         []WorldStateEntry  `json:"entries,omitempty"`
+	Handles         []WorldStateHandle `json:"handles,omitempty"`
+	Warnings        []string           `json:"warnings,omitempty"`
+}
+
+type WorldStateProvider interface {
+	Partition() string
+	BuildWorldState(ctx context.Context, input WorldStateProviderInput) (WorldStatePartition, error)
+}
+
+type WorldStateProviderAdapter struct {
+	PartitionName string
+	ProviderName  string
+	Build         func(context.Context, WorldStateProviderInput) (WorldStatePartition, error)
+}
+    WorldStateProviderAdapter adapts a host function to WorldStateProvider.
+
+func (p WorldStateProviderAdapter) BuildWorldState(ctx context.Context, input WorldStateProviderInput) (WorldStatePartition, error)
+
+func (p WorldStateProviderAdapter) Partition() string
+
+type WorldStateProviderInput struct {
+	Query           WorldStateQuery        `json:"query"`
+	Scope           ExecutionScope         `json:"scope"`
+	Events          []RuntimeEventEnvelope `json:"events,omitempty"`
+	SnapshotID      string                 `json:"snapshot_id,omitempty"`
+	SourceWatermark string                 `json:"source_watermark,omitempty"`
+	SourceSeq       int64                  `json:"source_seq,omitempty"`
+	BuiltAt         string                 `json:"built_at,omitempty"`
+	Permission      *PermissionSnapshot    `json:"permission,omitempty"`
+}
+
+type WorldStateQuery struct {
+	RunID     string `json:"run_id,omitempty"`
+	Partition string `json:"partition,omitempty"`
+}
+
+type WorldStateSnapshot struct {
+	SchemaVersion   string                `json:"schema_version"`
+	SnapshotID      string                `json:"snapshot_id"`
+	BuildID         string                `json:"build_id,omitempty"`
+	RuntimeEpoch    string                `json:"runtime_epoch,omitempty"`
+	SessionID       string                `json:"session_id,omitempty"`
+	RunID           string                `json:"run_id"`
+	Version         int                   `json:"version"`
+	GeneratedAt     string                `json:"generated_at"`
+	BuiltAt         string                `json:"built_at,omitempty"`
+	SourceWatermark string                `json:"source_watermark,omitempty"`
+	Partitions      []WorldStatePartition `json:"partitions,omitempty"`
+	Handles         []WorldStateHandle    `json:"handles,omitempty"`
+	Warnings        []string              `json:"warnings,omitempty"`
+	Entries         []WorldStateEntry     `json:"entries,omitempty"`
+}
+
+type WriteFileRequest struct {
+	RelativePath     string         `json:"relative_path"`
+	Content          []byte         `json:"content,omitempty"`
+	ActiveActivityID string         `json:"active_activity_id,omitempty"`
+	RunID            string         `json:"run_id,omitempty"`
+	Scope            ExecutionScope `json:"scope,omitempty"`
+}
+

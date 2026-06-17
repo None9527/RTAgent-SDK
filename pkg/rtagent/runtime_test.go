@@ -503,19 +503,24 @@ func TestRuntimeWorldStateIsRunScoped(t *testing.T) {
 		}
 	}
 
+	// Emit real kernel events into separate runs to test run-scope
+	// isolation of the activity partition. After removing the legacy
+	// WorldStateBuilder (which relied on never-emitted file.modified
+	// events), artifact partition no longer exists. Activity partition
+	// is the natural replacement for testing run-scope projection.
 	if _, err := rt.Emit(ctx, RuntimeEventDraft{
 		RunID:   "run-a",
-		Kind:    EventKind("file.modified"),
-		Message: "run a modified a.txt",
-		Payload: map[string]any{"filepath": "a.txt", "artifact_id": "artifact-a"},
+		Kind:    EventKindToolInvoked,
+		Message: "run a invoked tool-a",
+		Payload: map[string]any{"tool_call_id": "call-a", "tool_name": "tool-a"},
 	}); err != nil {
 		t.Fatalf("Emit(run-a) error = %v", err)
 	}
 	if _, err := rt.Emit(ctx, RuntimeEventDraft{
 		RunID:   "run-b",
-		Kind:    EventKind("file.modified"),
-		Message: "run b modified b.txt",
-		Payload: map[string]any{"filepath": "b.txt", "artifact_id": "artifact-b"},
+		Kind:    EventKindToolInvoked,
+		Message: "run b invoked tool-b",
+		Payload: map[string]any{"tool_call_id": "call-b", "tool_name": "tool-b"},
 	}); err != nil {
 		t.Fatalf("Emit(run-b) error = %v", err)
 	}
@@ -524,13 +529,44 @@ func TestRuntimeWorldStateIsRunScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WorldState(run-a) error = %v", err)
 	}
-	assertSubjects(t, snapshotA, []string{"a.txt"})
+	// Run-a's WorldState should contain its own tool activity but not run-b's.
+	foundCallA := false
+	foundCallB := false
+	for _, entry := range snapshotA.Entries {
+		if entry.Subject == "call-a" {
+			foundCallA = true
+		}
+		if entry.Subject == "call-b" {
+			foundCallB = true
+		}
+	}
+	if !foundCallA {
+		t.Fatalf("WorldState(run-a) should contain call-a activity, entries: %v", snapshotA.Entries)
+	}
+	if foundCallB {
+		t.Fatalf("WorldState(run-a) should NOT contain call-b activity (run-scope leak), entries: %v", snapshotA.Entries)
+	}
 
 	snapshotB, err := rt.WorldState(ctx, WorldStateQuery{RunID: "run-b"})
 	if err != nil {
 		t.Fatalf("WorldState(run-b) error = %v", err)
 	}
-	assertSubjects(t, snapshotB, []string{"b.txt"})
+	foundCallA = false
+	foundCallB = false
+	for _, entry := range snapshotB.Entries {
+		if entry.Subject == "call-a" {
+			foundCallA = true
+		}
+		if entry.Subject == "call-b" {
+			foundCallB = true
+		}
+	}
+	if !foundCallB {
+		t.Fatalf("WorldState(run-b) should contain call-b activity, entries: %v", snapshotB.Entries)
+	}
+	if foundCallA {
+		t.Fatalf("WorldState(run-b) should NOT contain call-a activity (run-scope leak), entries: %v", snapshotB.Entries)
+	}
 }
 
 func TestRuntimeEmitPreservesOccurredAt(t *testing.T) {

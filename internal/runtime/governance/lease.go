@@ -76,3 +76,13 @@ func (m *LocalLeaseManager) renewLease(ctx context.Context, leaseID string, ttl 
 	rec.ExpiresAt = time.Now().UTC().Add(ttl).Format(time.RFC3339)
 	return m.store.PutLease(ctx, rec)
 }
+
+// Renew extends the lease identified by leaseID by ttl from now. It is safe to
+// call periodically during a long-running activity to prevent lease expiry.
+// Renew returns an error when the lease does not exist or has already been
+// released.
+func (m *LocalLeaseManager) Renew(ctx context.Context, leaseID string, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.renewLease(ctx, leaseID, ttl)
+}

@@ -14,6 +14,11 @@ import (
 
 var ErrRuntimeClosed = errors.New("rtagent runtime is closed")
 
+// Compile-time check: Runtime satisfies the PermissionCenter interface so hosts
+// can inject a custom PermissionCenter into HostPorts or fall back to the
+// built-in Runtime implementation.
+var _ PermissionCenter = (*Runtime)(nil)
+
 // defaultMaxToolIterations is the fallback iteration budget when
 // RuntimeConfig.MaxToolIterations is unset. It is a conservative middle ground
 // between ngoagent's minimum (16) and default (64) — enough for realistic
@@ -33,6 +38,7 @@ type Runtime struct {
 	mcpProvider         MCPProvider
 	skillProvider       SkillProvider
 	worldStateProviders []WorldStateProvider
+	permissionCenter    PermissionCenter // optional custom permission center from HostPorts
 	maxToolIterations   int
 	maxContextMessages  int
 	runLeaseTTL         time.Duration
@@ -149,6 +155,7 @@ func newRuntimeFromKernel(runtimeCfg RuntimeConfig, workDir string, host HostPor
 		mcpProvider:         host.MCP,
 		skillProvider:       host.Skill,
 		worldStateProviders: append([]WorldStateProvider(nil), host.WorldState...),
+		permissionCenter:    host.PermissionCenter,
 		maxToolIterations:   maxToolIterations,
 		maxContextMessages:  maxContextMessages,
 		runLeaseTTL:         runLeaseTTL,

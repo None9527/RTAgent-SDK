@@ -1,8 +1,6 @@
 package rtagent
 
 import (
-	"encoding/json"
-	"fmt"
 	"sync"
 )
 
@@ -134,32 +132,101 @@ func (c *worldStateCache) put(runID string, snapshot WorldStateSnapshot) {
 	c.mu.Unlock()
 }
 
-// invalidate removes the cached snapshot for runID, forcing the next query to
-// recompute. Used on run/session lifecycle events that change projected state
-// outside the event journal (e.g. session stop affecting capability
-// authorization).
-func (c *worldStateCache) invalidate(runID string) {
-	c.mu.Lock()
-	delete(c.entries, runID)
-	c.mu.Unlock()
+// deepCopyWorldStateSnapshot returns a fully independent copy of s so that
+// neither the cache nor its callers alias any nested slice/map/pointer. It
+// copies fields manually rather than using JSON round-trip to avoid the
+// performance cost and fragility (panic on unexported fields, omitempty
+// loss) of Marshal/Unmarshal.
+func deepCopyWorldStateSnapshot(s WorldStateSnapshot) WorldStateSnapshot {
+	clone := s
+	clone.Partitions = copyWorldStatePartitions(s.Partitions)
+	clone.Handles = copyWorldStateHandles(s.Handles)
+	clone.Warnings = copyStringSlice(s.Warnings)
+	clone.Entries = copyWorldStateEntries(s.Entries)
+	return clone
 }
 
-// deepCopyWorldStateSnapshot returns a fully independent copy of s so that
-// neither the cache nor its callers alias any nested slice/map/pointer. It uses
-// JSON round-trip because WorldStateSnapshot and its nested types (Entry,
-// Handle, CapabilityState) carry stable snake_case JSON tags and contain only
-// JSON-serializable fields, including nested slices (EvidenceRefs,
-// ResourceLocks) and maps (Metadata). A panic here would indicate a
-// non-serializable field was added to the WorldState types, which the cache
-// cannot safely copy — so it surfaces loudly instead of silently aliasing.
-func deepCopyWorldStateSnapshot(s WorldStateSnapshot) WorldStateSnapshot {
-	bytes, err := json.Marshal(s)
-	if err != nil {
-		panic(fmt.Sprintf("worldstate cache: marshal snapshot for deep copy: %v", err))
+func copyWorldStatePartitions(src []WorldStatePartition) []WorldStatePartition {
+	if src == nil {
+		return nil
 	}
-	var clone WorldStateSnapshot
-	if err := json.Unmarshal(bytes, &clone); err != nil {
-		panic(fmt.Sprintf("worldstate cache: unmarshal snapshot for deep copy: %v", err))
+	dst := make([]WorldStatePartition, len(src))
+	for i := range src {
+		dst[i] = src[i]
+		dst[i].Entries = copyWorldStateEntries(src[i].Entries)
+		dst[i].Handles = copyWorldStateHandles(src[i].Handles)
+		dst[i].Warnings = copyStringSlice(src[i].Warnings)
 	}
-	return clone
+	return dst
+}
+
+func copyWorldStateEntries(src []WorldStateEntry) []WorldStateEntry {
+	if src == nil {
+		return nil
+	}
+	dst := make([]WorldStateEntry, len(src))
+	for i := range src {
+		dst[i] = src[i]
+		dst[i].EvidenceRefs = copyStringSlice(src[i].EvidenceRefs)
+		if src[i].Capability != nil {
+			cp := *src[i].Capability
+			cp.ResourceLocks = copyResourceLocks(src[i].Capability.ResourceLocks)
+			cp.RequiredGrants = copyPermissionGrants(src[i].Capability.RequiredGrants)
+			dst[i].Capability = &cp
+		}
+		dst[i].Metadata = copyStringAnyMap(src[i].Metadata)
+	}
+	return dst
+}
+
+func copyWorldStateHandles(src []WorldStateHandle) []WorldStateHandle {
+	if src == nil {
+		return nil
+	}
+	dst := make([]WorldStateHandle, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func copyStringSlice(src []string) []string {
+	if src == nil {
+		return nil
+	}
+	dst := make([]string, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func copyResourceLocks(src []ResourceLock) []ResourceLock {
+	if src == nil {
+		return nil
+	}
+	dst := make([]ResourceLock, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func copyPermissionGrants(src []ScopedPermissionGrant) []ScopedPermissionGrant {
+	if src == nil {
+		return nil
+	}
+	dst := make([]ScopedPermissionGrant, len(src))
+	copy(dst, src)
+	return dst
+}
+
+// copyStringAnyMap returns a shallow copy of src — the top-level map is
+// independent, but nested mutable values (nested maps/slices inside Metadata)
+// are shared between cache and caller. This is acceptable for WorldStateEntry
+// Metadata, which is treated as opaque/scalar. Use JSON round-trip if a deep
+// copy of nested mutable values is required.
+func copyStringAnyMap(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }

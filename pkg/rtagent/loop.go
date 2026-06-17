@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 )
 
 func (r *Runtime) Run(ctx context.Context, cmd RuntimeCommand) (RuntimeStateProjection, error) {
@@ -26,6 +27,8 @@ func (r *Runtime) Run(ctx context.Context, cmd RuntimeCommand) (RuntimeStateProj
 	if err != nil {
 		return r.failRun(ctx, scope, activityID, "lease_acquire_failed", err)
 	}
+	// Start lease renewal to prevent expiry during long-running loops.
+	defer r.startLeaseRenewal(ctx, leaseID)()
 	defer func() {
 		if leaseID != "" && r.kernel != nil && r.kernel.leaseManager != nil {
 			_ = r.kernel.leaseManager.Release(ctx, leaseID)
@@ -82,7 +85,13 @@ func (r *Runtime) Run(ctx context.Context, cmd RuntimeCommand) (RuntimeStateProj
 	}); err != nil {
 		return r.failRun(ctx, scope, activityID, "checkpoint_context_packet_failed", err)
 	}
-	return r.runModelToolLoop(ctx, state, activityID)
+	projection, err = r.runModelToolLoop(ctx, state, activityID)
+	// Enrich the terminal projection with WorldState and Permission
+	// snapshots so callers of Run / SubmitRun get a complete picture
+	// without a separate Inspect call. Best-effort: errors are silently
+	// swallowed so the projection is never lost.
+	r.enrichProjection(ctx, scope.RunID, &projection)
+	return projection, err
 }
 
 func (r *Runtime) runModelToolLoop(ctx context.Context, state loopContinuation, activityID string) (RuntimeStateProjection, error) {

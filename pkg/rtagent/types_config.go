@@ -81,4 +81,9 @@ type HostPorts struct {
 	MCP        MCPProvider
 	Skill      SkillProvider
 	WorldState []WorldStateProvider
+	// PermissionCenter is an optional custom permission implementation. When
+	// nil (default), the Runtime uses its built-in CheckPermission /
+	// ResolvePermission methods. Hosts inject a PermissionCenter to customize
+	// policy evaluation, grant storage, or approval workflows.
+	PermissionCenter PermissionCenter
 }

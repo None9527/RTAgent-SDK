@@ -184,3 +184,18 @@ type ArtifactModel struct {
 }
 
 func (ArtifactModel) TableName() string { return "v2_artifact_records" }
+
+type ContextHandleModel struct {
+	HandleID              string `gorm:"primaryKey;size:255"`
+	RunID                 string `gorm:"size:255;index"`
+	Kind                  string `gorm:"size:64"`
+	Title                 string `gorm:"size:512"`
+	Summary               string `gorm:"type:text"`
+	SourceRef             string `gorm:"size:512"`
+	TokenEstimate         int
+	Freshness             float64
+	MaterializationPolicy string `gorm:"size:64"`
+	EvidenceRefsJSON      string `gorm:"type:text"`
+}
+
+func (ContextHandleModel) TableName() string { return "v2_context_handles" }

@@ -36,7 +36,6 @@ const (
 	WorldStatePartitionContext    = "context"
 	WorldStatePartitionGovernance = "governance"
 	WorldStatePartitionHypothesis = "hypothesis"
-	WorldStatePartitionArtifact   = "artifact"
 )
 const (
 	CapabilityStateVisible    = "visible"
@@ -92,6 +91,35 @@ const (
 	PermissionCapabilityShellExec      = "shell.exec"
 	PermissionCapabilityMCPCall        = "mcp.call"
 	PermissionCapabilityModelApproval  = "model.approval"
+)
+const (
+	EventKindRunCreated          = events.KindRunCreated
+	EventKindAgentStarted        = events.KindAgentStarted
+	EventKindAgentPlanProposed   = events.KindAgentPlanProposed
+	EventKindPermissionRequested = events.KindPermissionRequested
+	EventKindPermissionGranted   = events.KindPermissionGranted
+	EventKindPermissionDenied    = events.KindPermissionDenied
+	EventKindToolInvoked         = events.KindToolInvoked
+	EventKindToolSucceeded       = events.KindToolSucceeded
+	EventKindToolFailed          = events.KindToolFailed
+	EventKindActivityStarted     = events.KindActivityStarted
+	EventKindActivityCompleted   = events.KindActivityCompleted
+
+	EventKindSessionStarted = events.KindSessionStarted
+	EventKindSessionEnded   = events.KindSessionEnded
+	EventKindTurnStarted    = events.KindTurnStarted
+	EventKindTurnCompleted  = events.KindTurnCompleted
+	EventKindTurnFailed     = events.KindTurnFailed
+	EventKindTurnCancelled  = events.KindTurnCancelled
+	EventKindRunInterrupted = events.KindRunInterrupted
+	EventKindRunHeartbeat   = events.KindRunHeartbeat
+
+	EventKindContextPacketCreated = events.KindContextPacketCreated
+	EventKindContextCompacted     = events.KindContextCompacted
+	EventKindModelRequested       = events.KindModelRequested
+	EventKindModelResponded       = events.KindModelResponded
+	EventKindModelDelta           = events.KindModelDelta
+	EventKindCheckpointCreated    = events.KindCheckpointCreated
 )
 const (
 	ModelStreamEventTextDelta     = "text_delta"
@@ -277,37 +305,10 @@ type ContextPacket struct {
 	GeneratedAt          time.Time              `json:"generated_at,omitempty"`
 }
 
-type EventKind string
+type EventKind = events.Kind
+    EventKind is a type alias for events.Kind, the canonical event kind type
+    shared across the SDK. Keep using EventKind* constants as before.
 
-const (
-	EventKindRunCreated          EventKind = "run.created"
-	EventKindAgentStarted        EventKind = "agent.started"
-	EventKindAgentPlanProposed   EventKind = "agent.plan.proposed"
-	EventKindPermissionRequested EventKind = "permission.requested"
-	EventKindPermissionGranted   EventKind = "permission.granted"
-	EventKindPermissionDenied    EventKind = "permission.denied"
-	EventKindToolInvoked         EventKind = "tool.invoked"
-	EventKindToolSucceeded       EventKind = "tool.succeeded"
-	EventKindToolFailed          EventKind = "tool.failed"
-	EventKindActivityStarted     EventKind = "activity.started"
-	EventKindActivityCompleted   EventKind = "activity.completed"
-
-	EventKindSessionStarted EventKind = "session.started"
-	EventKindSessionEnded   EventKind = "session.ended"
-	EventKindTurnStarted    EventKind = "turn.started"
-	EventKindTurnCompleted  EventKind = "turn.completed"
-	EventKindTurnFailed     EventKind = "turn.failed"
-	EventKindTurnCancelled  EventKind = "turn.cancelled"
-	EventKindRunInterrupted EventKind = "run.interrupted"
-	EventKindRunHeartbeat   EventKind = "run.heartbeat"
-
-	EventKindContextPacketCreated EventKind = "context.packet.created"
-	EventKindContextCompacted     EventKind = "context.compacted"
-	EventKindModelRequested       EventKind = "model.requested"
-	EventKindModelResponded       EventKind = "model.responded"
-	EventKindModelDelta           EventKind = "model.delta"
-	EventKindCheckpointCreated    EventKind = "checkpoint.created"
-)
 type EventQuery struct {
 	RunID     string `json:"run_id,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
@@ -351,6 +352,11 @@ type HostPorts struct {
 	MCP        MCPProvider
 	Skill      SkillProvider
 	WorldState []WorldStateProvider
+	// PermissionCenter is an optional custom permission implementation. When
+	// nil (default), the Runtime uses its built-in CheckPermission /
+	// ResolvePermission methods. Hosts inject a PermissionCenter to customize
+	// policy evaluation, grant storage, or approval workflows.
+	PermissionCenter PermissionCenter
 }
 
 type HypothesisFact struct {
@@ -913,6 +919,15 @@ type RuntimeStateProjection struct {
 	ApprovalRequest *ApprovalRequest `json:"approval_request,omitempty"`
 	PlanArtifact    *PlanArtifact    `json:"plan_artifact,omitempty"`
 	Problem         *RuntimeError    `json:"problem,omitempty"`
+	// WorldState is the full world-state snapshot at the time the projection was
+	// built. Populated by Run / SubmitRun on completion, suspension, or failure.
+	// Zero when the runtime is still initializing and no world state is available.
+	WorldState *WorldStateSnapshot `json:"world_state,omitempty"`
+	// Permission is the permission snapshot at the time the projection was built.
+	// Populated alongside WorldState for the same lifecycle events.
+	Permission *PermissionSnapshot `json:"permission,omitempty"`
+	// Warnings carries non-fatal diagnostic messages collected during the run.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type ScopedPermissionGrant struct {

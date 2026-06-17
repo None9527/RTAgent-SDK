@@ -29,7 +29,7 @@ func (r *Runtime) completeRun(ctx context.Context, scope ExecutionScope, activit
 	if err := r.emitActivityCompleted(ctx, scope, activityID, RuntimeStatusCompleted, ""); err != nil {
 		return RuntimeStateProjection{}, err
 	}
-	return RuntimeStateProjection{
+	proj := RuntimeStateProjection{
 		RunID:          scope.RunID,
 		SessionID:      scope.SessionID,
 		Status:         RuntimeStatusCompleted,
@@ -38,7 +38,8 @@ func (r *Runtime) completeRun(ctx context.Context, scope ExecutionScope, activit
 		PlanningState:  scope.PlanningState,
 		Output:         response.Output,
 		PlanArtifact:   response.PlanArtifact,
-	}, nil
+	}
+	return proj, nil
 }
 
 func (r *Runtime) suspendRun(ctx context.Context, scope ExecutionScope, activityID string, response ModelResponse) (RuntimeStateProjection, error) {
@@ -171,6 +172,30 @@ func runtimeErrorForCause(code string, cause error) RuntimeError {
 	return problem
 }
 
+// enrichProjection appends WorldState and Permission snapshots to a terminal
+// or suspended projection. It is best-effort: errors are silently swallowed so
+// a projection is never lost because of a snapshot build failure.
+//
+// This method builds snapshots directly without touching the WorldState cache,
+// so that subsequent calls to WorldState() after the run completes (e.g. after
+// a host registers additional context handles) see the latest state.
+func (r *Runtime) enrichProjection(ctx context.Context, runID string, proj *RuntimeStateProjection) {
+	if proj == nil || runID == "" {
+		return
+	}
+	events, err := r.ListEvents(ctx, EventQuery{RunID: runID})
+	if err != nil {
+		return
+	}
+	snapshot := r.buildWorldStateSnapshot(ctx, runID, "" /* full, unfiltered */, events)
+	proj.WorldState = &snapshot
+	proj.Warnings = append(proj.Warnings, snapshot.Warnings...)
+
+	perm := r.permissionSnapshotFromEvents(ctx, runID, events)
+	proj.Permission = &perm
+	proj.Warnings = append(proj.Warnings, perm.Warnings...)
+}
+
 func (r *Runtime) putRunStatus(ctx context.Context, scope ExecutionScope, status, resolution string, completed bool) error {
 	rec, err := r.kernel.store.GetRun(ctx, scope.RunID)
 	if err != nil {
@@ -186,4 +211,30 @@ func (r *Runtime) putRunStatus(ctx context.Context, scope ExecutionScope, status
 		return fmt.Errorf("put run status: %w", err)
 	}
 	return nil
+}
+
+// startLeaseRenewal launches a background goroutine that renews the lease
+// identified by leaseID every runLeaseTTL/2 until the returned cancel function
+// is called or the parent context is cancelled. It prevents lease expiry
+// during long-running loops. The caller MUST defer the returned cancel
+// function. When leaseID is empty or no lease manager is configured, this is a
+// no-op and returns a no-op cancel function.
+func (r *Runtime) startLeaseRenewal(ctx context.Context, leaseID string) context.CancelFunc {
+	leaseCtx, cancel := context.WithCancel(ctx)
+	if leaseID == "" || r.kernel == nil || r.kernel.leaseManager == nil || r.runLeaseTTL <= 0 {
+		return cancel
+	}
+	go func() {
+		ticker := time.NewTicker(r.runLeaseTTL / 2)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = r.kernel.leaseManager.Renew(leaseCtx, leaseID, r.runLeaseTTL)
+			case <-leaseCtx.Done():
+				return
+			}
+		}
+	}()
+	return cancel
 }

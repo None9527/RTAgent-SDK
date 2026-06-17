@@ -207,6 +207,8 @@ func (r *Runtime) resumeLoopContinuation(ctx context.Context, resumeSource strin
 	if err != nil {
 		return r.failRun(ctx, scope, activityID, "approval_resume_lease_acquire_failed", err)
 	}
+	// Start lease renewal to prevent expiry during long resumed loops.
+	defer r.startLeaseRenewal(ctx, leaseID)()
 	defer func() {
 		if leaseID != "" && r.kernel != nil && r.kernel.leaseManager != nil {
 			_ = r.kernel.leaseManager.Release(ctx, leaseID)

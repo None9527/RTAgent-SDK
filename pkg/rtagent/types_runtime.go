@@ -67,6 +67,15 @@ type RuntimeStateProjection struct {
 	ApprovalRequest *ApprovalRequest `json:"approval_request,omitempty"`
 	PlanArtifact    *PlanArtifact    `json:"plan_artifact,omitempty"`
 	Problem         *RuntimeError    `json:"problem,omitempty"`
+	// WorldState is the full world-state snapshot at the time the projection was
+	// built. Populated by Run / SubmitRun on completion, suspension, or failure.
+	// Zero when the runtime is still initializing and no world state is available.
+	WorldState *WorldStateSnapshot `json:"world_state,omitempty"`
+	// Permission is the permission snapshot at the time the projection was built.
+	// Populated alongside WorldState for the same lifecycle events.
+	Permission *PermissionSnapshot `json:"permission,omitempty"`
+	// Warnings carries non-fatal diagnostic messages collected during the run.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type RuntimeError struct {

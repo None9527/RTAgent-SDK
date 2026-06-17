@@ -1,5 +1,7 @@
 package rtagent
 
+import "github.com/None9527/RTAgent-SDK/internal/runtime/events"
+
 const (
 	SchemaRuntimeEventEnvelopeV1 = "runtime_event_envelope.v1"
 	SchemaRuntimeInspectV1       = "runtime_inspect.v1"
@@ -18,7 +20,6 @@ const (
 	WorldStatePartitionContext    = "context"
 	WorldStatePartitionGovernance = "governance"
 	WorldStatePartitionHypothesis = "hypothesis"
-	WorldStatePartitionArtifact   = "artifact"
 )
 
 const (
@@ -81,34 +82,36 @@ const (
 	PermissionCapabilityModelApproval  = "model.approval"
 )
 
-type EventKind string
+// EventKind is a type alias for events.Kind, the canonical event kind type
+// shared across the SDK. Keep using EventKind* constants as before.
+type EventKind = events.Kind
 
 const (
-	EventKindRunCreated          EventKind = "run.created"
-	EventKindAgentStarted        EventKind = "agent.started"
-	EventKindAgentPlanProposed   EventKind = "agent.plan.proposed"
-	EventKindPermissionRequested EventKind = "permission.requested"
-	EventKindPermissionGranted   EventKind = "permission.granted"
-	EventKindPermissionDenied    EventKind = "permission.denied"
-	EventKindToolInvoked         EventKind = "tool.invoked"
-	EventKindToolSucceeded       EventKind = "tool.succeeded"
-	EventKindToolFailed          EventKind = "tool.failed"
-	EventKindActivityStarted     EventKind = "activity.started"
-	EventKindActivityCompleted   EventKind = "activity.completed"
+	EventKindRunCreated          = events.KindRunCreated
+	EventKindAgentStarted        = events.KindAgentStarted
+	EventKindAgentPlanProposed   = events.KindAgentPlanProposed
+	EventKindPermissionRequested = events.KindPermissionRequested
+	EventKindPermissionGranted   = events.KindPermissionGranted
+	EventKindPermissionDenied    = events.KindPermissionDenied
+	EventKindToolInvoked         = events.KindToolInvoked
+	EventKindToolSucceeded       = events.KindToolSucceeded
+	EventKindToolFailed          = events.KindToolFailed
+	EventKindActivityStarted     = events.KindActivityStarted
+	EventKindActivityCompleted   = events.KindActivityCompleted
 
-	EventKindSessionStarted EventKind = "session.started"
-	EventKindSessionEnded   EventKind = "session.ended"
-	EventKindTurnStarted    EventKind = "turn.started"
-	EventKindTurnCompleted  EventKind = "turn.completed"
-	EventKindTurnFailed     EventKind = "turn.failed"
-	EventKindTurnCancelled  EventKind = "turn.cancelled"
-	EventKindRunInterrupted EventKind = "run.interrupted"
-	EventKindRunHeartbeat   EventKind = "run.heartbeat"
+	EventKindSessionStarted = events.KindSessionStarted
+	EventKindSessionEnded   = events.KindSessionEnded
+	EventKindTurnStarted    = events.KindTurnStarted
+	EventKindTurnCompleted  = events.KindTurnCompleted
+	EventKindTurnFailed     = events.KindTurnFailed
+	EventKindTurnCancelled  = events.KindTurnCancelled
+	EventKindRunInterrupted = events.KindRunInterrupted
+	EventKindRunHeartbeat   = events.KindRunHeartbeat
 
-	EventKindContextPacketCreated EventKind = "context.packet.created"
-	EventKindContextCompacted     EventKind = "context.compacted"
-	EventKindModelRequested       EventKind = "model.requested"
-	EventKindModelResponded       EventKind = "model.responded"
-	EventKindModelDelta           EventKind = "model.delta"
-	EventKindCheckpointCreated    EventKind = "checkpoint.created"
+	EventKindContextPacketCreated = events.KindContextPacketCreated
+	EventKindContextCompacted     = events.KindContextCompacted
+	EventKindModelRequested       = events.KindModelRequested
+	EventKindModelResponded       = events.KindModelResponded
+	EventKindModelDelta           = events.KindModelDelta
+	EventKindCheckpointCreated    = events.KindCheckpointCreated
 )

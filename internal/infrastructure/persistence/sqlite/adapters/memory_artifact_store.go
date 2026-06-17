@@ -122,3 +122,57 @@ func artifactRecordFromModel(m ArtifactModel) persistence.ArtifactRecord {
 		},
 	}
 }
+
+func (b *SQLiteBundle) PutContextHandle(ctx context.Context, rec persistence.ContextHandleRecord) error {
+	evidenceJSON, _ := json.Marshal(rec.EvidenceRefs)
+	m := ContextHandleModel{
+		HandleID:              rec.HandleID,
+		RunID:                 rec.RunID,
+		Kind:                  rec.Kind,
+		Title:                 rec.Title,
+		Summary:               rec.Summary,
+		SourceRef:             rec.SourceRef,
+		TokenEstimate:         rec.TokenEstimate,
+		Freshness:             rec.Freshness,
+		MaterializationPolicy: rec.MaterializationPolicy,
+		EvidenceRefsJSON:      string(evidenceJSON),
+	}
+	return b.db.WithContext(ctx).Save(&m).Error
+}
+
+func (b *SQLiteBundle) GetContextHandle(ctx context.Context, handleID string) (persistence.ContextHandleRecord, error) {
+	var m ContextHandleModel
+	if err := b.db.WithContext(ctx).First(&m, "handle_id = ?", handleID).Error; err != nil {
+		return persistence.ContextHandleRecord{}, err
+	}
+	return contextHandleRecordFromModel(m), nil
+}
+
+func (b *SQLiteBundle) ListContextHandlesByRunID(ctx context.Context, runID string) ([]persistence.ContextHandleRecord, error) {
+	var models []ContextHandleModel
+	if err := b.db.WithContext(ctx).Order("handle_id ASC").Find(&models, "run_id = ?", runID).Error; err != nil {
+		return nil, err
+	}
+	results := make([]persistence.ContextHandleRecord, 0, len(models))
+	for _, m := range models {
+		results = append(results, contextHandleRecordFromModel(m))
+	}
+	return results, nil
+}
+
+func contextHandleRecordFromModel(m ContextHandleModel) persistence.ContextHandleRecord {
+	var refs []string
+	_ = json.Unmarshal([]byte(m.EvidenceRefsJSON), &refs)
+	return persistence.ContextHandleRecord{
+		HandleID:              m.HandleID,
+		RunID:                 m.RunID,
+		Kind:                  m.Kind,
+		Title:                 m.Title,
+		Summary:               m.Summary,
+		SourceRef:             m.SourceRef,
+		TokenEstimate:         m.TokenEstimate,
+		Freshness:             m.Freshness,
+		MaterializationPolicy: m.MaterializationPolicy,
+		EvidenceRefs:          refs,
+	}
+}

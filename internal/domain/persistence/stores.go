@@ -66,6 +66,12 @@ type LeaseStore interface {
 	GetActiveLeaseByResource(ctx context.Context, resource string) (LeaseRecord, error)
 }
 
+type ContextHandleStore interface {
+	PutContextHandle(ctx context.Context, rec ContextHandleRecord) error
+	GetContextHandle(ctx context.Context, handleID string) (ContextHandleRecord, error)
+	ListContextHandlesByRunID(ctx context.Context, runID string) ([]ContextHandleRecord, error)
+}
+
 type Bundle interface {
 	RunStore
 	ThreadStore
@@ -79,4 +85,5 @@ type Bundle interface {
 	PermissionStore
 	GrantStore
 	LeaseStore
+	ContextHandleStore
 }

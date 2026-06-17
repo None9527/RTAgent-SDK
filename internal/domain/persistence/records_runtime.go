@@ -80,3 +80,16 @@ type ActivityRecord struct {
 	Error            string   `json:"error,omitempty"`
 	Authority        string   `json:"authority,omitempty"`
 }
+
+type ContextHandleRecord struct {
+	HandleID              string   `json:"handle_id,omitempty"`
+	RunID                 string   `json:"run_id,omitempty"`
+	Kind                  string   `json:"kind,omitempty"`
+	Title                 string   `json:"title,omitempty"`
+	Summary               string   `json:"summary,omitempty"`
+	SourceRef             string   `json:"source_ref,omitempty"`
+	TokenEstimate         int      `json:"token_estimate,omitempty"`
+	Freshness             float64  `json:"freshness,omitempty"`
+	MaterializationPolicy string   `json:"materialization_policy,omitempty"`
+	EvidenceRefs          []string `json:"evidence_refs,omitempty"`
+}

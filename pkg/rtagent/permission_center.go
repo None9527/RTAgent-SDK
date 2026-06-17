@@ -12,6 +12,11 @@ func (r *Runtime) CheckPermission(ctx context.Context, req PermissionCheckReques
 	if err := r.ensureReady(); err != nil {
 		return PermissionCheckResult{}, err
 	}
+	// Delegate to the host-injected PermissionCenter when present, otherwise
+	// use the built-in Runtime implementation.
+	if r.permissionCenter != nil {
+		return r.permissionCenter.CheckPermission(ctx, req)
+	}
 	check := normalizePermissionCheck(req)
 	if strings.TrimSpace(check.scope.RunID) != "" || !check.readOnly {
 		if err := r.ensureRunExists(ctx, check.scope.RunID); err != nil {
@@ -116,6 +121,10 @@ func (r *Runtime) ensurePermissionSessionCanProceed(ctx context.Context, check p
 func (r *Runtime) ResolvePermission(ctx context.Context, req PermissionDecisionRequest) (PermissionDecisionResult, error) {
 	if err := r.ensureReady(); err != nil {
 		return PermissionDecisionResult{}, err
+	}
+	// Delegate to the host-injected PermissionCenter when present.
+	if r.permissionCenter != nil {
+		return r.permissionCenter.ResolvePermission(ctx, req)
 	}
 	approvalID := strings.TrimSpace(req.ApprovalID)
 	if approvalID == "" {

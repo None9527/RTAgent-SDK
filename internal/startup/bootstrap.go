@@ -14,18 +14,32 @@ import (
 	"github.com/None9527/RTAgent-SDK/internal/runtime/events"
 	"github.com/None9527/RTAgent-SDK/internal/runtime/execution"
 	"github.com/None9527/RTAgent-SDK/internal/runtime/governance"
-	"github.com/None9527/RTAgent-SDK/internal/runtime/worldstate"
 )
 
 type RuntimeContainer struct {
-	DB              *gorm.DB
+	db              *gorm.DB
 	Store           persistence.Bundle
 	EventBus        *events.InProcessEventBus
 	LeaseManager    *governance.LocalLeaseManager
 	ContextRegistry *contextengine.LocalHandleRegistry
 	Materializer    *contextengine.LocalMaterializer
 	Workspace       *execution.ManagedWorkspace
-	WSBuilder       *worldstate.WorldStateBuilder
+}
+
+// Close shuts down the runtime container, closing the event bus and the
+// underlying database connection. It is safe to call multiple times.
+func (c *RuntimeContainer) Close() error {
+	if c.EventBus != nil {
+		c.EventBus.Close()
+	}
+	if c.db == nil {
+		return nil
+	}
+	sqlDB, err := c.db.DB()
+	if err != nil || sqlDB == nil {
+		return err
+	}
+	return sqlDB.Close()
 }
 
 func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeContainer, error) {
@@ -54,6 +68,7 @@ func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeC
 		&adapters.ToolSchemaSnapshotModel{},
 		&adapters.MemoryModel{},
 		&adapters.ArtifactModel{},
+		&adapters.ContextHandleModel{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("db migration: %w", err)
@@ -66,26 +81,20 @@ func BootstrapSystem(ctx context.Context, dsn string, workDir string) (*RuntimeC
 	leaseMgr := governance.NewLocalLeaseManager(storeAdapter)
 
 	// Wire context engine
-	contextRegistry := contextengine.NewLocalHandleRegistry()
+	contextRegistry := contextengine.NewLocalHandleRegistryWithStore(storeAdapter)
 	materializer := contextengine.NewLocalMaterializer(contextRegistry, storeAdapter)
 
 	// Wire workspace
 	workspace := execution.NewManagedWorkspace(workDir, storeAdapter)
 
-	wsBuilder := worldstate.NewWorldStateBuilder(storeAdapter)
-	eventBus.Subscribe("*", func(ctx context.Context, ev events.Event) {
-		wsBuilder.HandleEvent(ctx, ev)
-	})
-
 	container := &RuntimeContainer{
-		DB:              db,
+		db:              db,
 		Store:           storeAdapter,
 		EventBus:        eventBus,
 		LeaseManager:    leaseMgr,
 		ContextRegistry: contextRegistry,
 		Materializer:    materializer,
 		Workspace:       workspace,
-		WSBuilder:       wsBuilder,
 	}
 	return container, nil
 }

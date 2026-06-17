@@ -6,7 +6,6 @@ import (
 
 	"github.com/None9527/RTAgent-SDK/internal/domain/contextual"
 	"github.com/None9527/RTAgent-SDK/internal/domain/persistence"
-	domainworld "github.com/None9527/RTAgent-SDK/internal/domain/worldstate"
 	"github.com/None9527/RTAgent-SDK/internal/runtime/events"
 	"github.com/None9527/RTAgent-SDK/internal/startup"
 )
@@ -18,6 +17,7 @@ type runtimeEventPublisher interface {
 type runLeaseManager interface {
 	Acquire(ctx context.Context, resource string, activityID string, ttl time.Duration) (string, error)
 	Release(ctx context.Context, leaseID string) error
+	Renew(ctx context.Context, leaseID string, ttl time.Duration) error
 }
 
 type contextHandleRegistry interface {
@@ -33,11 +33,6 @@ type workspaceWriter interface {
 	WriteFile(ctx context.Context, relativePath string, content []byte, activeActivityID string, runID string) (persistence.ArtifactRecord, error)
 }
 
-type worldStateProjector interface {
-	RebuildAll(ctx context.Context, runID string) error
-	GetLatestSnapshot(ctx context.Context, runID string) ([]domainworld.Entry, error)
-}
-
 type runtimeStore interface {
 	persistence.RunStore
 	persistence.ThreadStore
@@ -49,6 +44,7 @@ type runtimeStore interface {
 	persistence.ToolSchemaStore
 	persistence.PermissionStore
 	persistence.GrantStore
+	persistence.ContextHandleStore
 }
 
 type runtimeKernel struct {
@@ -58,7 +54,6 @@ type runtimeKernel struct {
 	contextRegistry contextHandleRegistry
 	materializer    contextMaterializer
 	workspace       workspaceWriter
-	wsBuilder       worldStateProjector
 	closeFn         func() error
 }
 
@@ -67,19 +62,9 @@ func bootstrapRuntimeKernel(ctx context.Context, dsn, workDir string) (*runtimeK
 	if err != nil {
 		return nil, err
 	}
-	closeKernel := func() error {
-		if container.EventBus != nil {
-			container.EventBus.Close()
+closeKernel := func() error {
+			return container.Close()
 		}
-		if container.DB == nil {
-			return nil
-		}
-		sqlDB, err := container.DB.DB()
-		if err != nil || sqlDB == nil {
-			return err
-		}
-		return sqlDB.Close()
-	}
 	return &runtimeKernel{
 		store:           container.Store,
 		eventBus:        container.EventBus,
@@ -87,7 +72,6 @@ func bootstrapRuntimeKernel(ctx context.Context, dsn, workDir string) (*runtimeK
 		contextRegistry: container.ContextRegistry,
 		materializer:    container.Materializer,
 		workspace:       container.Workspace,
-		wsBuilder:       container.WSBuilder,
 		closeFn:         closeKernel,
 	}, nil
 }

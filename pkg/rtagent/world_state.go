@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	domainworld "github.com/None9527/RTAgent-SDK/internal/domain/worldstate"
 )
 
 type worldStatePartitionDraft struct {
@@ -97,7 +95,7 @@ func (d *worldStatePartitionDraft) build() WorldStatePartition {
 	return d.partition
 }
 
-func (r *Runtime) buildWorldStateSnapshot(ctx context.Context, runID, selectedPartition string, entries []domainworld.Entry, events []RuntimeEventEnvelope) WorldStateSnapshot {
+func (r *Runtime) buildWorldStateSnapshot(ctx context.Context, runID, selectedPartition string, events []RuntimeEventEnvelope) WorldStateSnapshot {
 	maxSeq := lastRuntimeEventSeq(events)
 	watermark := fmt.Sprintf("runtime_event:%d", maxSeq)
 	builtAt := time.Now().UTC().Format(time.RFC3339)
@@ -117,18 +115,6 @@ func (r *Runtime) buildWorldStateSnapshot(ctx context.Context, runID, selectedPa
 		draft := newWorldStatePartitionDraft(partition, provider, source, snapshotID, watermark, builtAt, sourceSeq)
 		drafts[partition] = draft
 		return draft
-	}
-
-	legacyEntries := make([]WorldStateEntry, 0, len(entries))
-	for _, entry := range entries {
-		publicEntry := worldStateEntryFromLegacy(entry, events)
-		if publicEntry.Partition == "" {
-			continue
-		}
-		draftFor(publicEntry.Partition, "runtime_worldstate_builder", "runtime_event", publicEntry.SourceSeq).addEntry(publicEntry)
-		if selectedPartition == "" || publicEntry.Partition == selectedPartition {
-			legacyEntries = append(legacyEntries, publicEntry)
-		}
 	}
 
 	r.addContextWorldState(ctx, runID, events, draftFor, maxSeq)
@@ -161,17 +147,19 @@ func (r *Runtime) buildWorldStateSnapshot(ctx context.Context, runID, selectedPa
 	}
 
 	handles := make([]WorldStateHandle, 0)
+	entries := make([]WorldStateEntry, 0)
 	for _, partition := range partitions {
 		handles = append(handles, partition.Handles...)
+		entries = append(entries, partition.Entries...)
 	}
-	sort.SliceStable(legacyEntries, func(i, j int) bool {
-		if legacyEntries[i].Partition != legacyEntries[j].Partition {
-			return legacyEntries[i].Partition < legacyEntries[j].Partition
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Partition != entries[j].Partition {
+			return entries[i].Partition < entries[j].Partition
 		}
-		if legacyEntries[i].Subject != legacyEntries[j].Subject {
-			return legacyEntries[i].Subject < legacyEntries[j].Subject
+		if entries[i].Subject != entries[j].Subject {
+			return entries[i].Subject < entries[j].Subject
 		}
-		return legacyEntries[i].ID < legacyEntries[j].ID
+		return entries[i].ID < entries[j].ID
 	})
 	sort.SliceStable(handles, func(i, j int) bool {
 		return handles[i].Handle < handles[j].Handle
@@ -191,6 +179,6 @@ func (r *Runtime) buildWorldStateSnapshot(ctx context.Context, runID, selectedPa
 		Partitions:      partitions,
 		Handles:         handles,
 		Warnings:        warnings,
-		Entries:         legacyEntries,
+		Entries:         entries,
 	}
 }

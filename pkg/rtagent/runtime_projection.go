@@ -149,30 +149,23 @@ func (r *Runtime) WorldState(ctx context.Context, query WorldStateQuery) (WorldS
 
 	// Fast path: for unfiltered queries, serve from the in-memory WorldState
 	// cache when it is fresh up to the run's current projection-relevant event
-	// sequence. This avoids the full recompute (RebuildAll + ListEvents +
-	// 8-partition rebuild) on every query. The freshness watermark is the
-	// projection-relevant sequence (not MAX(sequence)), so high-frequency
-	// loop-internal events (heartbeats, model deltas, checkpoints) do NOT
-	// invalidate the cache — only state-changing events do. See
-	// world_state_cache.go and docs/sdk-handbook.md WorldState Projection.
+	// sequence. This avoids the full recompute (ListEvents + 8-partition
+	// rebuild) on every query. The freshness watermark is the projection-
+	// relevant sequence (not MAX(sequence)), so high-frequency loop-internal
+	// events (heartbeats, model deltas, checkpoints) do NOT invalidate the
+	// cache — only state-changing events do. See world_state_cache.go and
+	// docs/sdk-handbook.md WorldState Projection.
 	if selectedPartition == "" {
 		if cached, ok := r.wsCache.get(runID); ok {
 			return cached, nil
 		}
 	}
 
-	if err := r.kernel.wsBuilder.RebuildAll(ctx, runID); err != nil {
-		return WorldStateSnapshot{}, err
-	}
-	entries, err := r.kernel.wsBuilder.GetLatestSnapshot(ctx, runID)
-	if err != nil {
-		return WorldStateSnapshot{}, err
-	}
 	events, err := r.ListEvents(ctx, EventQuery{RunID: runID})
 	if err != nil {
 		return WorldStateSnapshot{}, err
 	}
-	snapshot := r.buildWorldStateSnapshot(ctx, runID, selectedPartition, entries, events)
+	snapshot := r.buildWorldStateSnapshot(ctx, runID, selectedPartition, events)
 
 	// Cache only full (unfiltered) snapshots; filtered results depend on
 	// partition-narrowed external providers and are not safely derivable from a

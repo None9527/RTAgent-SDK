@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+// Kind is the canonical event kind type used throughout the SDK. The public
+// package re-exports it as EventKind via a type alias so that host code and
+// SDK internals share a single definition. See pkg/rtagent/types_constants.go.
 type Kind string
 
 const (
@@ -19,14 +22,20 @@ const (
 	KindToolFailed           Kind = "tool.failed"
 	KindActivityStarted      Kind = "activity.started"
 	KindActivityCompleted    Kind = "activity.completed"
-	KindFileModified         Kind = "file.modified"
-	KindTaskBlocked          Kind = "task.blocked"
-	KindTaskResumed          Kind = "task.resumed"
 	KindSessionStarted       Kind = "session.started"
 	KindSessionEnded         Kind = "session.ended"
+	KindTurnStarted          Kind = "turn.started"
+	KindTurnCompleted        Kind = "turn.completed"
+	KindTurnFailed           Kind = "turn.failed"
+	KindTurnCancelled        Kind = "turn.cancelled"
+	KindRunInterrupted       Kind = "run.interrupted"
+	KindRunHeartbeat         Kind = "run.heartbeat"
 	KindContextPacketCreated Kind = "context.packet.created"
+	KindContextCompacted     Kind = "context.compacted"
 	KindModelRequested       Kind = "model.requested"
 	KindModelResponded       Kind = "model.responded"
+	KindModelDelta           Kind = "model.delta"
+	KindCheckpointCreated    Kind = "checkpoint.created"
 )
 
 type Event struct {
@@ -57,14 +66,20 @@ func (k Kind) Valid() bool {
 		KindToolFailed,
 		KindActivityStarted,
 		KindActivityCompleted,
-		KindFileModified,
-		KindTaskBlocked,
-		KindTaskResumed,
 		KindSessionStarted,
 		KindSessionEnded,
+		KindTurnStarted,
+		KindTurnCompleted,
+		KindTurnFailed,
+		KindTurnCancelled,
+		KindRunInterrupted,
+		KindRunHeartbeat,
 		KindContextPacketCreated,
+		KindContextCompacted,
 		KindModelRequested,
-		KindModelResponded:
+		KindModelResponded,
+		KindModelDelta,
+		KindCheckpointCreated:
 		return true
 	default:
 		return false

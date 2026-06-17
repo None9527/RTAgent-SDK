@@ -153,6 +153,5 @@ func worldStatePartitionOrder() []string {
 		WorldStatePartitionContext,
 		WorldStatePartitionGovernance,
 		WorldStatePartitionHypothesis,
-		WorldStatePartitionArtifact,
 	}
 }
